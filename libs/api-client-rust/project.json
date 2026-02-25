@@ -1,0 +1,54 @@
+{
+  "name": "api-client-rust",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/api-client-rust",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo build -p daytona-api-client"],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo test -p daytona-api-client"],
+        "parallel": false
+      }
+    },
+    "generate:api-client": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["rustApiClient"],
+      "outputs": [
+        "{projectRoot}/src/**/*.rs",
+        "{projectRoot}/Cargo.toml"
+      ],
+      "options": {
+        "commands": [
+          "rm -rf {projectRoot}/src {projectRoot}/docs",
+          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/api-client-rust --git-user-id=daytonaio -i dist/apps/api/openapi.json -g rust --additional-properties=packageName=daytona-api-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true -o libs/api-client-rust",
+          "bash hack/rust-client/postprocess.sh libs/api-client-rust"
+        ],
+        "parallel": false
+      },
+      "dependsOn": [
+        {
+          "target": "openapi",
+          "projects": "api"
+        }
+      ]
+    }
+  }
+}

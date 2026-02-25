@@ -1,0 +1,54 @@
+{
+  "name": "toolbox-api-client-rust",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/toolbox-api-client-rust",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo build -p daytona-toolbox-client"],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo test -p daytona-toolbox-client"],
+        "parallel": false
+      }
+    },
+    "generate:api-client": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["rustApiClient"],
+      "outputs": [
+        "{projectRoot}/src/**/*.rs",
+        "{projectRoot}/Cargo.toml"
+      ],
+      "options": {
+        "commands": [
+          "rm -rf {projectRoot}/src {projectRoot}/docs",
+          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/toolbox-api-client-rust --git-user-id=daytonaio -i apps/daemon/pkg/toolbox/docs/swagger.json -g rust --additional-properties=packageName=daytona-toolbox-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true -o libs/toolbox-api-client-rust",
+          "bash hack/rust-client/postprocess.sh libs/toolbox-api-client-rust"
+        ],
+        "parallel": false
+      },
+      "dependsOn": [
+        {
+          "target": "openapi",
+          "projects": "daemon"
+        }
+      ]
+    }
+  }
+}

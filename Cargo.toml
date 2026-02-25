@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "libs/api-client-rust",
+    "libs/toolbox-api-client-rust",
+    "libs/sdk-rust",
+]

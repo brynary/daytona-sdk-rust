@@ -1,0 +1,53 @@
+{
+  "name": "sdk-rust",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/sdk-rust/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo build -p daytona-sdk"],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo test -p daytona-sdk"],
+        "parallel": false
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo clippy -p daytona-sdk -- -D warnings"],
+        "parallel": false
+      }
+    },
+    "fmt": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": [],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "commands": ["cargo fmt -p daytona-sdk --check"],
+        "parallel": false
+      }
+    }
+  }
+}
