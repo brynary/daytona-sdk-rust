@@ -1,0 +1,344 @@
+digraph SpecDoD {
+    graph [
+        goal="Converge libs/sdk-rust/ to match the reference implementations in Go (sdk-go) and TypeScript (sdk-typescript). Do NOT modify generated API clients (api-client-rust, toolbox-api-client-rust). Only modify code under libs/sdk-rust/. Where Go and TypeScript diverge, use judgement on which to follow.",
+        default_max_retry="3",
+        retry_target="triage",
+        model_stylesheet="
+            * { llm_model: claude-opus-4-6; llm_provider: anthropic; }
+            .audit { reasoning_effort: high; }
+            .fix { llm_model: claude-opus-4-6; reasoning_effort: high; }
+            #final_audit { reasoning_effort: high; }
+        "
+    ]
+
+    start [shape=Mdiamond]
+    exit  [shape=Msquare]
+
+    /*------------------------------------------------------------------------
+     * Phase 1: Audit — compare Rust SDK against Go and TypeScript references
+     *
+     * Reference paths:
+     *   Go SDK:         /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/
+     *   TypeScript SDK: /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/
+     *   Rust SDK:       libs/sdk-rust/src/
+     *
+     * Module mapping:
+     *   client.rs           ↔ client.go, Daytona.ts
+     *   config.rs           ↔ (in client.go), (in Daytona.ts)
+     *   error.rs            ↔ (in errors/), (in errors/)
+     *   types.rs            ↔ (in types/), (in types/)
+     *   sandbox.rs          ↔ sandbox.go, Sandbox.ts
+     *   filesystem.rs       ↔ filesystem.go, FileSystem.ts
+     *   git.rs              ↔ git.go, Git.ts
+     *   process.rs          ↔ process.go, Process.ts
+     *   code_interpreter.rs ↔ code_interpreter.go, CodeInterpreter.ts
+     *   computer_use.rs     ↔ computer_use.go, ComputerUse.ts
+     *   image.rs            ↔ image.go, Image.ts
+     *   snapshot.rs         ↔ snapshot.go, Snapshot.ts
+     *   volume.rs           ↔ volume.go, Volume.ts
+     *   (missing)           ↔ object_storage.go, ObjectStorage.ts
+     *   (missing)           ↔ pty_handle.go, PtyHandle.ts
+     *----------------------------------------------------------------------*/
+
+    audit [
+        label="Audit: Full SDK comparison",
+        shape=box,
+        class="audit",
+        prompt="Compare the entire Rust SDK against both reference implementations. Read all of these files:
+
+Rust (our implementation):
+- libs/sdk-rust/src/lib.rs
+- libs/sdk-rust/src/client.rs
+- libs/sdk-rust/src/config.rs
+- libs/sdk-rust/src/error.rs
+- libs/sdk-rust/src/types.rs
+- libs/sdk-rust/src/sandbox.rs
+- libs/sdk-rust/src/snapshot.rs
+- libs/sdk-rust/src/volume.rs
+- libs/sdk-rust/src/image.rs
+- libs/sdk-rust/src/filesystem.rs
+- libs/sdk-rust/src/git.rs
+- libs/sdk-rust/src/process.rs
+- libs/sdk-rust/src/code_interpreter.rs
+- libs/sdk-rust/src/computer_use.rs
+
+Go reference:
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/client.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/sandbox.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/snapshot.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/volume.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/image.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/filesystem.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/git.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/process.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/code_interpreter.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/computer_use.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/object_storage.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/pty_handle.go
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/options/ (all files)
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/types/ (all files)
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/errors/ (all files)
+
+TypeScript reference:
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Daytona.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Sandbox.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Snapshot.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Volume.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Image.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/FileSystem.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Git.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/Process.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/CodeInterpreter.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/ComputerUse.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/ObjectStorage.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/PtyHandle.ts
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/types/ (all files)
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/errors/ (all files)
+- /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/index.ts
+
+Where Go and TypeScript diverge, use your judgement on which to follow.
+
+For each Rust module, compare against BOTH references and check:
+1. PUBLIC API SURFACE — are all public methods/functions present? Any missing?
+2. METHOD SIGNATURES — do parameters and return types align (accounting for language idioms)?
+3. BEHAVIOR — does the logic match? Are there behavioral differences?
+4. ERROR HANDLING — are the same error cases covered?
+5. MISSING MODULES — note any types/exports present in Go/TS but absent in Rust (e.g. object_storage, pty_handle)
+
+For each missing module (object_storage, pty_handle), document:
+1. What public API it exposes (methods, types)
+2. What generated API client methods it wraps
+3. How complex it would be to implement
+
+Also check: does the Rust SDK lib.rs export everything it should? Compare with the TypeScript index.ts.
+
+Respond with ONLY a JSON object (no prose) -- don't write it out as a file:
+{
+  \"areas\": {
+    \"core\": {
+      \"modules\": {
+        \"client\": {
+          \"missing_methods\": [ {\"name\": \"...\", \"in_go\": true/false, \"in_ts\": true/false, \"description\": \"...\"} ],
+          \"signature_mismatches\": [ {\"method\": \"...\", \"issue\": \"...\"} ],
+          \"behavior_gaps\": [ {\"description\": \"...\", \"severity\": \"high|medium|low\"} ]
+        },
+        \"config\": { ... },
+        \"error\": { ... },
+        \"types\": { ... }
+      }
+    },
+    \"sandbox_lifecycle\": {
+      \"modules\": {
+        \"sandbox\": { ... },
+        \"snapshot\": { ... },
+        \"volume\": { ... },
+        \"image\": { ... }
+      }
+    },
+    \"services\": {
+      \"modules\": {
+        \"filesystem\": { ... },
+        \"git\": { ... },
+        \"process\": { ... },
+        \"code_interpreter\": { ... },
+        \"computer_use\": { ... }
+      }
+    },
+    \"missing_modules\": {
+      \"modules\": {
+        \"object_storage\": {
+          \"methods\": [ {\"name\": \"...\", \"description\": \"...\", \"wraps_api\": \"...\"} ],
+          \"types\": [ \"...\" ],
+          \"complexity\": \"high|medium|low\",
+          \"notes\": \"...\"
+        },
+        \"pty_handle\": { ... }
+      },
+      \"missing_exports\": [ \"...\" ]
+    }
+  },
+  \"total_gaps\": N,
+  \"high_severity\": M,
+  \"medium_severity\": K,
+  \"low_severity\": L
+}
+
+Be thorough. Check every public method and type."
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 2: Triage — merge audit results, prioritize, decide next step
+     *----------------------------------------------------------------------*/
+
+    triage [
+        label="Triage & Prioritize",
+        shape=box,
+        prompt="You have the audit report in context (from audit). Create a prioritized list of ALL gaps between the Rust SDK and the Go/TypeScript reference implementations.
+
+Group gaps into:
+1. IMPLEMENTABLE — can be fixed by writing/modifying Rust code in libs/sdk-rust/src/ (adding methods, fixing signatures, aligning behavior)
+2. STRUCTURAL — requires new files or significant architecture changes (e.g., adding entirely new modules like object_storage.rs, pty_handle.rs)
+3. DEFERRED — requires external resources or changes outside libs/sdk-rust/ that cannot be done (e.g., changes to generated API clients, runtime testing with a real Daytona instance)
+
+For each IMPLEMENTABLE item, identify the exact file(s) to modify and briefly describe the fix.
+
+IMPORTANT CONSTRAINTS:
+- Do NOT propose changes to libs/api-client-rust/ or libs/toolbox-api-client-rust/ — those are generated from OpenAPI specs
+- Only propose changes to files under libs/sdk-rust/
+
+Respond with JSON (not by writing out a file):
+{
+  \"total_gaps\": N,
+  \"implementable\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\", \"severity\": \"high|medium|low\", \"files\": [\"...\"], \"fix\": \"...\"} ],
+  \"structural\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\", \"severity\": \"high|medium|low\", \"fix\": \"...\"} ],
+  \"deferred\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\", \"reason\": \"...\"} ],
+  \"verdict\": \"all_clear\" | \"has_fixes\" | \"only_deferred\"
+}
+
+If total_gaps == 0 or verdict == \"only_deferred\", set preferred_next_label to \"Done\".
+Otherwise set preferred_next_label to \"Fix\"."
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 3: Fix — implement the highest-priority convergence changes
+     *----------------------------------------------------------------------*/
+
+    fix_batch [
+        label="Implement Fixes",
+        shape=box,
+        class="fix",
+        goal_gate=true,
+        prompt="The triage report identified gaps between the Rust SDK and the Go/TypeScript reference implementations. Pick the top 5 most impactful items (or all if fewer than 5) and implement fixes.
+
+Begin by making sure the build is green with `cargo test`
+
+For each fix:
+1. Read the relevant Rust source file in libs/sdk-rust/src/
+2. Read the corresponding Go and/or TypeScript reference file to understand the expected behavior
+3. Implement the change to align the Rust SDK with the references
+4. Write the modified file(s) -- update tests as needed
+5. Verify compilation and tests pass (`cargo test`)
+
+Where Go and TypeScript diverge, use your judgement on which to follow.
+
+Constraints:
+- Do NOT modify any files under libs/api-client-rust/ or libs/toolbox-api-client-rust/ — those are generated
+- Only modify files under libs/sdk-rust/
+- Keep changes focused — align with reference implementations, don't over-engineer
+- Use idiomatic Rust (Result types, Option, proper error handling) — don't blindly transliterate Go/TS
+- When adding methods, check if the underlying API client already exposes the needed generated methods
+
+Respond with JSON (not by writing out a file):
+{
+  \"fixes_applied\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\", \"files_changed\": [\"...\"], \"reference_files\": [\"...\"]} ],
+  \"count\": N,
+  \"remaining_implementable\": M
+}
+
+If remaining_implementable > 0, set preferred_next_label to \"More fixes needed\".
+Otherwise set preferred_next_label to \"Re-audit\"."
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 4: Build verification
+     *----------------------------------------------------------------------*/
+
+    build_check [
+        label="Build & Test",
+        shape=parallelogram,
+        tool_command="cd /Users/bhelmkamp/p/brynary/daytona-sdk-rust && cargo build 2>&1 && echo '---BUILD OK---' && cargo test 2>&1 && echo '---ALL TESTS PASSED---'",
+        timeout="120s"
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 5: Build failure recovery
+     *----------------------------------------------------------------------*/
+
+    build_fix [
+        label="Fix Build Errors",
+        shape=box,
+        class="fix",
+        prompt="The build or tests failed. Read the build output from context (tool.output key). Diagnose the compilation errors or test failures and fix them.
+
+Read the relevant source files under libs/sdk-rust/src/, identify the issue, and write corrected versions. Common issues:
+- Missing use/imports
+- Type mismatches with generated API client types
+- Lifetime or borrow checker errors
+- Missing trait implementations
+
+IMPORTANT: Do NOT modify files under libs/api-client-rust/ or libs/toolbox-api-client-rust/.
+Only fix files under libs/sdk-rust/.
+
+Output the fixes applied and ensure the code will compile cleanly with: cargo build && cargo test"
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 6: Final audit to confirm fixes worked
+     *----------------------------------------------------------------------*/
+
+    final_audit [
+        label="Final Verification Audit",
+        shape=box,
+        prompt="This is a verification pass. Re-read the reference implementations for the modules that were changed:
+
+Go:  /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-go/pkg/daytona/
+TS:  /Users/bhelmkamp/p/daytonaio/daytona/libs/sdk-typescript/src/
+
+And re-read the Rust implementation files that were changed in this iteration under libs/sdk-rust/src/.
+
+Check ONLY the gaps that were previously identified. Have they been closed?
+
+Respond with JSON (not by writing out a file):
+{
+  \"verified_fixed\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\"} ],
+  \"still_failing\": [ {\"area\": \"...\", \"module\": \"...\", \"description\": \"...\", \"reason\": \"...\"} ],
+  \"newly_broken\": [ ... ],
+  \"remaining_total\": N
+}
+
+If remaining_total == 0 (ignoring DEFERRED items), set preferred_next_label to \"Complete\".
+Otherwise set preferred_next_label to \"More work needed\"."
+    ]
+
+    /*------------------------------------------------------------------------
+     * Phase 7: Human gate — confirm completion or push for another round
+     *----------------------------------------------------------------------*/
+
+    review_gate [
+        label="A) Accept & finish\nB) Push for another round",
+        shape=hexagon
+    ]
+
+    /*------------------------------------------------------------------------
+     * Edges
+     *----------------------------------------------------------------------*/
+
+    start -> audit
+    audit -> triage
+
+    /* Triage decision */
+    triage -> exit           [label="Done", condition="preferred_label=Done"]
+    triage -> fix_batch      [label="Fix", condition="preferred_label=Fix", weight=10]
+    triage -> exit           [label="Only deferred remain"]
+
+    /* Fix -> build check */
+    fix_batch -> build_check
+
+    /* Build check outcomes */
+    build_check -> final_audit     [label="Build OK", condition="outcome=success"]
+    build_check -> build_fix       [label="Build failed", condition="outcome=fail"]
+
+    /* Build fix loops back to build check */
+    build_fix -> build_check
+
+    /* Fix batch can loop for more fixes */
+    fix_batch -> fix_batch   [label="More fixes needed", condition="preferred_label=More fixes needed", loop_restart=true]
+
+    /* Final audit outcomes */
+    final_audit -> review_gate    [label="Complete", condition="preferred_label=Complete"]
+    final_audit -> triage         [label="More work needed", condition="preferred_label=More work needed"]
+
+    /* Human review gate */
+    review_gate -> exit           [label="A) Accept"]
+    review_gate -> triage         [label="B) Another round"]
+}
