@@ -110,11 +110,24 @@ pub enum CreateParams {
 }
 
 /// Options for creating a sandbox.
-#[derive(Debug, Clone, Default)]
+///
+/// By default, `wait_for_start` is `true` — the SDK waits for the sandbox to
+/// reach the "started" state before returning (matching Go/TypeScript behavior).
+#[derive(Debug, Clone)]
 pub struct CreateSandboxOptions {
     pub timeout: Option<std::time::Duration>,
     pub wait_for_start: bool,
     pub log_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+}
+
+impl Default for CreateSandboxOptions {
+    fn default() -> Self {
+        Self {
+            timeout: None,
+            wait_for_start: true,
+            log_sender: None,
+        }
+    }
 }
 
 /// Options for executing a command.
@@ -229,6 +242,15 @@ pub struct PreviewLink {
     pub token: String,
 }
 
+/// Paginated list of sandboxes.
+#[derive(Debug)]
+pub struct PaginatedSandboxes {
+    pub items: Vec<crate::sandbox::Sandbox>,
+    pub total: i64,
+    pub page: i64,
+    pub total_pages: i64,
+}
+
 /// Execution output message (from code interpreter).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMessage {
@@ -283,8 +305,6 @@ pub struct CreateSnapshotParams {
     pub resources: Option<Resources>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entrypoint: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skip_validation: Option<bool>,
 }
 
 /// Options for git clone.
@@ -397,7 +417,7 @@ pub struct WindowInfo {
 /// Options for pip install in DockerImage builder.
 #[derive(Debug, Clone, Default)]
 pub struct PipInstallOptions {
-    pub find_links: Option<String>,
+    pub find_links: Option<Vec<String>>,
     pub index_url: Option<String>,
     pub extra_index_urls: Option<Vec<String>>,
     pub pre: Option<bool>,

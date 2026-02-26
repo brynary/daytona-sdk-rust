@@ -109,17 +109,21 @@ impl MouseService<'_> {
     }
 
     /// Click at coordinates.
+    ///
+    /// The `button` parameter specifies which button ("left", "right", "middle").
+    /// Set `double` to `true` for a double-click, matching Go/TypeScript SDK behavior.
     pub async fn click(
         &self,
         x: i32,
         y: i32,
         button: &str,
+        double: Option<bool>,
     ) -> Result<daytona_toolbox_client::models::MouseClickResponse, DaytonaError> {
         let req = daytona_toolbox_client::models::MouseClickRequest {
             x: Some(x),
             y: Some(y),
             button: Some(button.to_string()),
-            double: None,
+            double,
         };
         let resp = computer_use_api::click(self.config, req)
             .await
@@ -177,10 +181,13 @@ pub struct KeyboardService<'a> {
 
 impl KeyboardService<'_> {
     /// Type text.
-    pub async fn type_text(&self, text: &str) -> Result<(), DaytonaError> {
+    ///
+    /// The optional `delay` parameter specifies milliseconds between keystrokes,
+    /// matching Go/TypeScript SDK behavior.
+    pub async fn type_text(&self, text: &str, delay: Option<i32>) -> Result<(), DaytonaError> {
         let req = daytona_toolbox_client::models::KeyboardTypeRequest {
             text: Some(text.to_string()),
-            delay: None,
+            delay,
         };
         computer_use_api::type_text(self.config, req)
             .await
@@ -188,11 +195,18 @@ impl KeyboardService<'_> {
         Ok(())
     }
 
-    /// Press a single key.
-    pub async fn press(&self, key: &str) -> Result<(), DaytonaError> {
+    /// Press a single key with optional modifier keys.
+    ///
+    /// The optional `modifiers` parameter specifies modifier keys to hold
+    /// (e.g., `["ctrl", "shift"]`), matching Go/TypeScript SDK behavior.
+    pub async fn press(
+        &self,
+        key: &str,
+        modifiers: Option<Vec<String>>,
+    ) -> Result<(), DaytonaError> {
         let req = daytona_toolbox_client::models::KeyboardPressRequest {
             key: Some(key.to_string()),
-            modifiers: None,
+            modifiers,
         };
         computer_use_api::press_key(self.config, req)
             .await
@@ -277,8 +291,17 @@ pub struct RecordingService<'a> {
 
 impl RecordingService<'_> {
     /// Start a recording.
-    pub async fn start(&self) -> Result<daytona_toolbox_client::models::Recording, DaytonaError> {
-        let resp = computer_use_api::start_recording(self.config, None)
+    ///
+    /// The optional `label` parameter sets a descriptive label for the recording,
+    /// matching Go/TypeScript SDK behavior.
+    pub async fn start(
+        &self,
+        label: Option<&str>,
+    ) -> Result<daytona_toolbox_client::models::Recording, DaytonaError> {
+        let req = label.map(|l| daytona_toolbox_client::models::StartRecordingRequest {
+            label: Some(l.to_string()),
+        });
+        let resp = computer_use_api::start_recording(self.config, req)
             .await
             .map_err(convert_toolbox_error)?;
         Ok(resp)
@@ -324,6 +347,40 @@ impl RecordingService<'_> {
         computer_use_api::delete_recording(self.config, recording_id)
             .await
             .map_err(convert_toolbox_error)?;
+        Ok(())
+    }
+
+    /// Download a recording file and save it to a local path.
+    ///
+    /// The file is streamed directly to disk. Matches Go SDK's
+    /// `Recording.Download(ctx, id, localPath)` and TypeScript SDK's
+    /// `recording.download(id, localPath)`.
+    pub async fn download(
+        &self,
+        recording_id: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), DaytonaError> {
+        let resp = computer_use_api::download_recording(self.config, recording_id)
+            .await
+            .map_err(convert_toolbox_error)?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| DaytonaError::general(format!("failed to read recording data: {}", e)))?;
+
+        // Create parent directory if needed
+        if let Some(parent) = local_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    DaytonaError::general(format!("failed to create parent directory: {}", e))
+                })?;
+            }
+        }
+
+        std::fs::write(local_path, &bytes).map_err(|e| {
+            DaytonaError::general(format!("failed to write recording file: {}", e))
+        })?;
+
         Ok(())
     }
 }
@@ -430,7 +487,7 @@ mod tests {
 
         mouse.get_position().await.unwrap();
         mouse.r#move(300, 400).await.unwrap();
-        mouse.click(300, 400, "left").await.unwrap();
+        mouse.click(300, 400, "left", None).await.unwrap();
         mouse.scroll(300, 400, 0, -3).await.unwrap();
         mouse.drag(100, 100, 500, 500).await.unwrap();
     }
@@ -460,8 +517,8 @@ mod tests {
         let svc = cu_service(&mock_server).await;
         let kb = svc.keyboard();
 
-        kb.type_text("Hello, world!").await.unwrap();
-        kb.press("Enter").await.unwrap();
+        kb.type_text("Hello, world!", None).await.unwrap();
+        kb.press("Enter", None).await.unwrap();
         kb.hotkey("ctrl+c").await.unwrap();
     }
 
@@ -570,10 +627,100 @@ mod tests {
         let svc = cu_service(&mock_server).await;
         let rec = svc.recording();
 
-        rec.start().await.unwrap();
+        rec.start(None).await.unwrap();
         rec.stop("rec-1").await.unwrap();
         rec.list().await.unwrap();
         rec.get("rec-1").await.unwrap();
         rec.delete("rec-1").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_mouse_double_click() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/computeruse/mouse/click"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"x": 300, "y": 400})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let svc = cu_service(&mock_server).await;
+        let mouse = svc.mouse();
+        mouse.click(300, 400, "left", Some(true)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_keyboard_type_with_delay() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/computeruse/keyboard/type"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let svc = cu_service(&mock_server).await;
+        let kb = svc.keyboard();
+        kb.type_text("slow typing", Some(50)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_keyboard_press_with_modifiers() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/computeruse/keyboard/key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let svc = cu_service(&mock_server).await;
+        let kb = svc.keyboard();
+        kb.press("c", Some(vec!["ctrl".to_string()]))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_recording_start_with_label() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/computeruse/recordings/start"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"id": "rec-2", "status": "recording", "fileName": "rec-2.mp4", "filePath": "/tmp/rec-2.mp4", "startTime": "2024-01-01T00:00:00Z"})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let svc = cu_service(&mock_server).await;
+        let rec = svc.recording();
+        let recording = rec.start(Some("test-recording")).await.unwrap();
+        assert_eq!(recording.id, "rec-2");
+    }
+
+    #[tokio::test]
+    async fn test_recording_download() {
+        let mock_server = MockServer::start().await;
+
+        let recording_data = b"fake-video-data";
+        Mock::given(method("GET"))
+            .and(path("/computeruse/recordings/rec-1/download"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_bytes(recording_data.to_vec()),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let svc = cu_service(&mock_server).await;
+        let rec = svc.recording();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let local_path = tmp.path().to_path_buf();
+        rec.download("rec-1", &local_path).await.unwrap();
+        let saved = std::fs::read(&local_path).unwrap();
+        assert_eq!(saved, recording_data);
     }
 }

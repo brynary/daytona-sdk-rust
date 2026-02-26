@@ -5,6 +5,7 @@ const ENV_API_KEY: &str = "DAYTONA_API_KEY";
 const ENV_JWT_TOKEN: &str = "DAYTONA_JWT_TOKEN";
 const ENV_ORGANIZATION_ID: &str = "DAYTONA_ORGANIZATION_ID";
 const ENV_API_URL: &str = "DAYTONA_API_URL";
+const ENV_SERVER_URL: &str = "DAYTONA_SERVER_URL";
 const ENV_TARGET: &str = "DAYTONA_TARGET";
 
 /// Configuration for the Daytona SDK client.
@@ -58,6 +59,7 @@ pub(crate) fn resolve_config(config: &DaytonaConfig) -> Result<ResolvedConfig, D
         .api_url
         .clone()
         .or_else(|| std::env::var(ENV_API_URL).ok())
+        .or_else(|| std::env::var(ENV_SERVER_URL).ok())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| DEFAULT_API_URL.to_string());
 
@@ -106,6 +108,7 @@ mod tests {
             ENV_JWT_TOKEN,
             ENV_ORGANIZATION_ID,
             ENV_API_URL,
+            ENV_SERVER_URL,
             ENV_TARGET,
         ]
         .iter()
@@ -246,6 +249,35 @@ mod tests {
             };
             let resolved = resolve_config(&config).unwrap();
             assert_eq!(resolved.api_url, "https://app.daytona.io/api");
+        });
+    }
+
+    #[test]
+    fn test_server_url_fallback() {
+        with_clean_env(|| {
+            std::env::set_var(ENV_SERVER_URL, "https://legacy.server.com");
+
+            let config = DaytonaConfig {
+                api_key: Some("key".to_string()),
+                ..Default::default()
+            };
+            let resolved = resolve_config(&config).unwrap();
+            assert_eq!(resolved.api_url, "https://legacy.server.com");
+        });
+    }
+
+    #[test]
+    fn test_api_url_preferred_over_server_url() {
+        with_clean_env(|| {
+            std::env::set_var(ENV_API_URL, "https://api.daytona.io");
+            std::env::set_var(ENV_SERVER_URL, "https://legacy.server.com");
+
+            let config = DaytonaConfig {
+                api_key: Some("key".to_string()),
+                ..Default::default()
+            };
+            let resolved = resolve_config(&config).unwrap();
+            assert_eq!(resolved.api_url, "https://api.daytona.io");
         });
     }
 }

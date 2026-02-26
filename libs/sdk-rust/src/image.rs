@@ -4,10 +4,14 @@ use std::path::PathBuf;
 use crate::types::PipInstallOptions;
 
 /// A context file to send with the Docker build.
+///
+/// Matches Go SDK's `DockerImageContext` and TypeScript SDK's `Context` type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerImageContext {
-    pub source: String,
-    pub destination: String,
+    /// Local path to the file or directory.
+    pub source_path: String,
+    /// Path within the build context archive.
+    pub archive_path: String,
 }
 
 /// Builder for constructing Docker images using a fluent API.
@@ -28,8 +32,12 @@ impl DockerImage {
     }
 
     /// Create a new image from a Debian slim base with Python pre-installed.
-    pub fn debian_slim(python_version: &str) -> Self {
-        let base = format!("python:{}-slim", python_version);
+    ///
+    /// Defaults to Python 3.12 if no version is specified, matching Go/TypeScript
+    /// SDK behavior. Uses `slim-bookworm` variant for consistency with reference SDKs.
+    pub fn debian_slim(python_version: Option<&str>) -> Self {
+        let version = python_version.unwrap_or("3.12");
+        let base = format!("python:{}-slim-bookworm", version);
         DockerImage {
             instructions: vec![format!("FROM {}", base)],
             contexts: Vec::new(),
@@ -55,18 +63,23 @@ impl DockerImage {
     }
 
     /// Add pip install packages.
+    ///
+    /// Matches Go SDK `PipInstall` behavior: uses `pip install` without
+    /// `--no-cache-dir` (users can add it via `extra_options` if desired).
     pub fn pip_install(mut self, packages: &[&str], options: PipInstallOptions) -> Self {
-        let mut cmd = String::from("RUN pip install --no-cache-dir");
+        let mut cmd = String::from("RUN pip install");
 
         if let Some(ref find_links) = options.find_links {
-            cmd.push_str(&format!(" --find-links={}", find_links));
+            for link in find_links {
+                cmd.push_str(&format!(" --find-links {}", link));
+            }
         }
         if let Some(ref index_url) = options.index_url {
-            cmd.push_str(&format!(" --index-url={}", index_url));
+            cmd.push_str(&format!(" --index-url {}", index_url));
         }
         if let Some(ref extra_urls) = options.extra_index_urls {
             for url in extra_urls {
-                cmd.push_str(&format!(" --extra-index-url={}", url));
+                cmd.push_str(&format!(" --extra-index-url {}", url));
             }
         }
         if options.pre == Some(true) {
@@ -101,10 +114,13 @@ impl DockerImage {
     }
 
     /// Set the entrypoint.
+    ///
+    /// Uses JSON serialization for proper escaping, matching Go SDK's
+    /// `json.Marshal(cmd)` approach.
     pub fn entrypoint(mut self, args: &[&str]) -> Self {
-        let json_args: Vec<String> = args.iter().map(|a| format!("\"{}\"", a)).collect();
+        let json_array = serde_json::to_string(args).unwrap_or_else(|_| "[]".to_string());
         self.instructions
-            .push(format!("ENTRYPOINT [{}]", json_args.join(", ")));
+            .push(format!("ENTRYPOINT {}", json_array));
         self
     }
 
@@ -134,9 +150,14 @@ impl DockerImage {
         self
     }
 
-    /// Expose a port.
-    pub fn expose(mut self, port: u16) -> Self {
-        self.instructions.push(format!("EXPOSE {}", port));
+    /// Expose one or more ports.
+    ///
+    /// Matches Go SDK `Expose([]int)` behavior of accepting multiple ports
+    /// in a single call.
+    pub fn expose(mut self, ports: &[u16]) -> Self {
+        let port_strs: Vec<String> = ports.iter().map(|p| p.to_string()).collect();
+        self.instructions
+            .push(format!("EXPOSE {}", port_strs.join(" ")));
         self
     }
 
@@ -161,8 +182,8 @@ impl DockerImage {
             .unwrap_or_else(|| "file".to_string());
 
         self.contexts.push(DockerImageContext {
-            source: local_path.to_string(),
-            destination: filename.clone(),
+            source_path: local_path.to_string(),
+            archive_path: filename.clone(),
         });
         self.instructions
             .push(format!("COPY {} {}", filename, container_path));
@@ -177,8 +198,8 @@ impl DockerImage {
             .unwrap_or_else(|| "dir".to_string());
 
         self.contexts.push(DockerImageContext {
-            source: local_path.to_string(),
-            destination: dirname.clone(),
+            source_path: local_path.to_string(),
+            archive_path: dirname.clone(),
         });
         self.instructions
             .push(format!("COPY {} {}", dirname, container_path));
@@ -208,8 +229,14 @@ mod tests {
 
     #[test]
     fn test_debian_slim() {
-        let img = DockerImage::debian_slim("3.11");
-        assert_eq!(img.dockerfile(), "FROM python:3.11-slim");
+        let img = DockerImage::debian_slim(Some("3.11"));
+        assert_eq!(img.dockerfile(), "FROM python:3.11-slim-bookworm");
+    }
+
+    #[test]
+    fn test_debian_slim_default_version() {
+        let img = DockerImage::debian_slim(None);
+        assert_eq!(img.dockerfile(), "FROM python:3.12-slim-bookworm");
     }
 
     #[test]
@@ -231,7 +258,7 @@ mod tests {
         let df = img.dockerfile();
         assert!(df.contains("FROM ubuntu:22.04"));
         assert!(df.contains("apt-get update && apt-get install -y curl git"));
-        assert!(df.contains("pip install --no-cache-dir numpy pandas"));
+        assert!(df.contains("pip install numpy pandas"));
         assert!(df.contains("RUN echo 'hello'"));
         assert!(df.contains("ENV APP_ENV=production"));
         assert!(df.contains("WORKDIR /app"));
@@ -246,7 +273,7 @@ mod tests {
         };
         let img = DockerImage::base("python:3.11").pip_install(&["torch"], opts);
         let df = img.dockerfile();
-        assert!(df.contains("--index-url=https://custom.pypi.org/simple"));
+        assert!(df.contains("--index-url https://custom.pypi.org/simple"));
         assert!(df.contains("--pre"));
         assert!(df.contains("torch"));
     }
@@ -257,7 +284,7 @@ mod tests {
             .entrypoint(&["python", "-m"])
             .cmd(&["myapp"]);
         let df = img.dockerfile();
-        assert!(df.contains("ENTRYPOINT [\"python\", \"-m\"]"));
+        assert!(df.contains("ENTRYPOINT [\"python\",\"-m\"]"));
         assert!(df.contains("CMD [\"myapp\"]"));
     }
 
@@ -268,8 +295,8 @@ mod tests {
         let df = img.dockerfile();
         assert!(df.contains("COPY config.yaml /app/config.yaml"));
         assert_eq!(img.contexts().len(), 1);
-        assert_eq!(img.contexts()[0].source, "/tmp/config.yaml");
-        assert_eq!(img.contexts()[0].destination, "config.yaml");
+        assert_eq!(img.contexts()[0].source_path, "/tmp/config.yaml");
+        assert_eq!(img.contexts()[0].archive_path, "config.yaml");
     }
 
     #[test]
@@ -283,13 +310,20 @@ mod tests {
     #[test]
     fn test_expose_and_label() {
         let img = DockerImage::base("nginx")
-            .expose(8080)
+            .expose(&[8080])
             .label("version", "1.0")
             .volume("/data");
         let df = img.dockerfile();
         assert!(df.contains("EXPOSE 8080"));
         assert!(df.contains("LABEL version=\"1.0\""));
         assert!(df.contains("VOLUME [\"/data\"]"));
+    }
+
+    #[test]
+    fn test_expose_multiple_ports() {
+        let img = DockerImage::base("nginx").expose(&[8080, 8443]);
+        let df = img.dockerfile();
+        assert!(df.contains("EXPOSE 8080 8443"));
     }
 
     #[test]
@@ -319,7 +353,7 @@ mod tests {
             .pip_install(&["-r", "requirements.txt"], PipInstallOptions::default())
             .copy(".", "/app")
             .env("PYTHONUNBUFFERED", "1")
-            .expose(8000)
+            .expose(&[8000])
             .user("appuser")
             .entrypoint(&["python"])
             .cmd(&["manage.py", "runserver"]);
@@ -328,5 +362,20 @@ mod tests {
         let lines: Vec<&str> = df.lines().collect();
         assert_eq!(lines[0], "FROM python:3.11-slim");
         assert!(lines.len() >= 10);
+    }
+
+    #[test]
+    fn test_pip_install_find_links_multiple() {
+        let opts = PipInstallOptions {
+            find_links: Some(vec![
+                "https://mirror1.example.com".to_string(),
+                "https://mirror2.example.com".to_string(),
+            ]),
+            ..Default::default()
+        };
+        let img = DockerImage::base("python:3.11").pip_install(&["numpy"], opts);
+        let df = img.dockerfile();
+        assert!(df.contains("--find-links https://mirror1.example.com"));
+        assert!(df.contains("--find-links https://mirror2.example.com"));
     }
 }

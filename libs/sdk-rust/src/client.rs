@@ -9,7 +9,7 @@ use crate::config::{resolve_config, DaytonaConfig, ResolvedConfig};
 use crate::error::{error_from_response, DaytonaError};
 use crate::sandbox::Sandbox;
 use crate::snapshot::SnapshotService;
-use crate::types::{CreateParams, CreateSandboxOptions};
+use crate::types::{CreateParams, CreateSandboxOptions, PaginatedSandboxes};
 use crate::volume::VolumeService;
 
 const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -68,12 +68,19 @@ impl Client {
     }
 
     /// Create a new sandbox.
+    ///
+    /// By default, waits for the sandbox to reach the "started" state before
+    /// returning. Set `options.wait_for_start` to `false` to return immediately.
+    ///
+    /// When waiting, the returned Sandbox has up-to-date state from the API
+    /// (matching TypeScript SDK behavior where `create` waits and returns a
+    /// fully-initialized Sandbox).
     pub async fn create(
         &self,
         params: CreateParams,
         options: CreateSandboxOptions,
     ) -> Result<Sandbox, DaytonaError> {
-        let create_sandbox = build_create_request(&params, &self.config);
+        let create_sandbox = build_create_request(&params, &self.config)?;
 
         let api_sandbox = sandbox_api::create_sandbox(
             &self.api_config,
@@ -83,10 +90,23 @@ impl Client {
         .await
         .map_err(convert_api_error)?;
 
+        // Check for immediate error state (matching Go/TypeScript SDK behavior)
+        if let Some(state) = &api_sandbox.state {
+            if matches!(
+                state,
+                models::SandboxState::Error | models::SandboxState::BuildFailed
+            ) {
+                return Err(DaytonaError::general("sandbox failed to start"));
+            }
+        }
+
+        let sandbox_id = api_sandbox.id.clone();
         let sandbox = self.sandbox_from_api(api_sandbox);
 
         if options.wait_for_start {
             sandbox.wait_for_start(options.timeout).await?;
+            // Return a fresh sandbox with the final state (matching TS behavior)
+            return self.get(&sandbox_id).await;
         }
 
         Ok(sandbox)
@@ -94,6 +114,12 @@ impl Client {
 
     /// Get a sandbox by ID or name.
     pub async fn get(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
+        if sandbox_id_or_name.is_empty() {
+            return Err(DaytonaError::general(
+                "sandbox ID or name is required",
+            ));
+        }
+
         let api_sandbox = sandbox_api::get_sandbox(
             &self.api_config,
             sandbox_id_or_name,
@@ -106,22 +132,60 @@ impl Client {
         Ok(self.sandbox_from_api(api_sandbox))
     }
 
-    /// List all sandboxes, optionally filtered by labels.
-    pub async fn list(&self, labels: Option<&str>) -> Result<Vec<Sandbox>, DaytonaError> {
-        let api_sandboxes = sandbox_api::list_sandboxes(
+    /// List sandboxes with optional label filtering and pagination.
+    ///
+    /// Returns a paginated result matching the Go/TypeScript SDK behavior.
+    pub async fn list(
+        &self,
+        labels: Option<&HashMap<String, String>>,
+        page: Option<i32>,
+        limit: Option<i32>,
+    ) -> Result<PaginatedSandboxes, DaytonaError> {
+        if let Some(p) = page {
+            if p < 1 {
+                return Err(DaytonaError::general("page must be a positive integer"));
+            }
+        }
+        if let Some(l) = limit {
+            if l < 1 {
+                return Err(DaytonaError::general("limit must be a positive integer"));
+            }
+        }
+
+        let labels_json = labels
+            .map(|l| serde_json::to_string(l).unwrap_or_default());
+
+        let result = sandbox_api::list_sandboxes_paginated(
             &self.api_config,
             self.config.organization_id.as_deref(),
-            Some(true),
-            labels,
-            None,
+            page.map(|p| p as f64),
+            limit.map(|l| l as f64),
+            None,        // id
+            None,        // name
+            labels_json.as_deref(),
+            None,        // include_errored_deleted
+            None,        // states
+            None,        // snapshots
+            None,        // regions
+            None, None, None, None, None, None,
+            None, None,  // last_event_after, last_event_before
+            None, None,  // sort, order
         )
         .await
         .map_err(convert_api_error)?;
 
-        Ok(api_sandboxes
+        let items = result
+            .items
             .into_iter()
             .map(|s| self.sandbox_from_api(s))
-            .collect())
+            .collect();
+
+        Ok(PaginatedSandboxes {
+            items,
+            total: result.total as i64,
+            page: result.page as i64,
+            total_pages: result.total_pages as i64,
+        })
     }
 
     /// Delete a sandbox by ID or name.
@@ -137,22 +201,64 @@ impl Client {
         Ok(())
     }
 
-    /// Start a stopped sandbox.
-    pub async fn start(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
-        let api_sandbox = sandbox_api::start_sandbox(
+    /// Find a single sandbox by ID/name or by matching labels.
+    ///
+    /// If `sandbox_id_or_name` is provided, delegates to [`Client::get`].
+    /// Otherwise, searches for sandboxes matching the provided labels and returns
+    /// the first match. Returns a not-found error if no matching sandbox is found.
+    pub async fn find_one(
+        &self,
+        sandbox_id_or_name: Option<&str>,
+        labels: Option<&HashMap<String, String>>,
+    ) -> Result<Sandbox, DaytonaError> {
+        if let Some(id_or_name) = sandbox_id_or_name {
+            if !id_or_name.is_empty() {
+                return self.get(id_or_name).await;
+            }
+        }
+
+        let labels_json = labels
+            .map(|l| serde_json::to_string(l).unwrap_or_default());
+
+        let api_sandboxes = sandbox_api::list_sandboxes_paginated(
             &self.api_config,
-            sandbox_id_or_name,
             self.config.organization_id.as_deref(),
+            Some(1.0),   // page
+            Some(1.0),   // limit
+            None,        // id
+            None,        // name
+            labels_json.as_deref(),
+            None,        // include_errored_deleted
+            None,        // states
+            None,        // snapshots
+            None,        // regions
+            None, None, None, None, None, None,
+            None, None,  // last_event_after, last_event_before
+            None, None,  // sort, order
         )
         .await
         .map_err(convert_api_error)?;
 
-        Ok(self.sandbox_from_api(api_sandbox))
+        let items = api_sandboxes.items;
+        if items.is_empty() {
+            return Err(DaytonaError::not_found("no sandbox found matching criteria"));
+        }
+
+        Ok(self.sandbox_from_api(items.into_iter().next().unwrap()))
     }
 
-    /// Stop a running sandbox.
-    pub async fn stop(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
-        let api_sandbox = sandbox_api::stop_sandbox(
+    /// Start a stopped sandbox and wait for it to reach the started state.
+    ///
+    /// Matches Go/TypeScript SDK behavior where starting a sandbox waits for the
+    /// state transition before returning. Uses a default timeout of 60 seconds.
+    ///
+    /// Returns a fresh Sandbox with up-to-date state after waiting completes,
+    /// matching the TypeScript SDK's `Daytona.start(sandbox)` which delegates to
+    /// `sandbox.start()` and updates all sandbox fields.
+    pub async fn start(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
+        let start_time = tokio::time::Instant::now();
+
+        sandbox_api::start_sandbox(
             &self.api_config,
             sandbox_id_or_name,
             self.config.organization_id.as_deref(),
@@ -160,7 +266,81 @@ impl Client {
         .await
         .map_err(convert_api_error)?;
 
-        Ok(self.sandbox_from_api(api_sandbox))
+        // Build a lightweight sandbox to perform the wait
+        let api_sandbox = sandbox_api::get_sandbox(
+            &self.api_config,
+            sandbox_id_or_name,
+            self.config.organization_id.as_deref(),
+            Some(true),
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        let sandbox = self.sandbox_from_api(api_sandbox);
+
+        // Deduct elapsed time from the 60s timeout (matching Go/TS behavior)
+        let elapsed = start_time.elapsed();
+        let remaining = std::time::Duration::from_secs(60).saturating_sub(elapsed);
+        let timeout = if remaining.is_zero() {
+            Some(std::time::Duration::from_millis(1))
+        } else {
+            Some(remaining)
+        };
+        sandbox.wait_for_start(timeout).await?;
+
+        // Return a fresh sandbox with the final state
+        self.get(sandbox_id_or_name).await
+    }
+
+    /// Stop a running sandbox and wait for it to reach the stopped state.
+    ///
+    /// Matches Go/TypeScript SDK behavior where stopping a sandbox waits for the
+    /// state transition before returning. Uses a default timeout of 60 seconds.
+    ///
+    /// Returns a fresh Sandbox with up-to-date state after waiting completes.
+    pub async fn stop(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
+        let start_time = tokio::time::Instant::now();
+
+        sandbox_api::stop_sandbox(
+            &self.api_config,
+            sandbox_id_or_name,
+            self.config.organization_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        // Build a lightweight sandbox to perform the wait
+        let api_sandbox = sandbox_api::get_sandbox(
+            &self.api_config,
+            sandbox_id_or_name,
+            self.config.organization_id.as_deref(),
+            Some(true),
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        let sandbox = self.sandbox_from_api(api_sandbox);
+
+        // Deduct elapsed time from the 60s timeout (matching Go/TS behavior)
+        let elapsed = start_time.elapsed();
+        let remaining = std::time::Duration::from_secs(60).saturating_sub(elapsed);
+        let timeout = if remaining.is_zero() {
+            Some(std::time::Duration::from_millis(1))
+        } else {
+            Some(remaining)
+        };
+        sandbox.wait_for_stop(timeout).await?;
+
+        // Return a fresh sandbox with the final state (or handle ephemeral deletion)
+        match self.get(sandbox_id_or_name).await {
+            Ok(s) => Ok(s),
+            Err(DaytonaError::NotFound { .. }) => {
+                // Ephemeral sandbox was auto-deleted on stop — return last known state
+                // with Destroyed state, matching TS refreshDataSafe pattern
+                Ok(sandbox)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Convert an API sandbox model into an SDK Sandbox.
@@ -169,16 +349,17 @@ impl Client {
     }
 
     /// Get the toolbox proxy URL for a sandbox, using the cache.
+    /// The cache is keyed by sandbox region (target), matching Go SDK behavior.
     #[allow(dead_code)]
     pub(crate) async fn get_toolbox_proxy_url(
         &self,
         sandbox_id: &str,
+        region: &str,
     ) -> Result<String, DaytonaError> {
         // Check cache first
-        let target = self.config.target.as_deref().unwrap_or("default");
         {
             let cache = self.toolbox_proxy_cache.read().await;
-            if let Some(url) = cache.get(target) {
+            if let Some(url) = cache.get(region) {
                 return Ok(format!("{}/{}", url, sandbox_id));
             }
         }
@@ -194,10 +375,10 @@ impl Client {
 
         let base_url = proxy_url.url;
 
-        // Cache the base URL
+        // Cache the base URL by region
         {
             let mut cache = self.toolbox_proxy_cache.write().await;
-            cache.insert(target.to_string(), base_url.clone());
+            cache.insert(region.to_string(), base_url.clone());
         }
 
         Ok(format!("{}/{}", base_url, sandbox_id))
@@ -208,8 +389,9 @@ impl Client {
     pub(crate) async fn create_toolbox_config(
         &self,
         sandbox_id: &str,
+        region: &str,
     ) -> Result<daytona_toolbox_client::apis::configuration::Configuration, DaytonaError> {
-        let toolbox_url = self.get_toolbox_proxy_url(sandbox_id).await?;
+        let toolbox_url = self.get_toolbox_proxy_url(sandbox_id, region).await?;
 
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(token) = self.config.bearer_token() {
@@ -218,6 +400,20 @@ impl Client {
                 reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
                     .map_err(|e| DaytonaError::general(e.to_string()))?,
             );
+        }
+        // Add SDK identification headers (matching Go SDK's createToolboxClient)
+        headers.insert(
+            "X-Daytona-Source",
+            reqwest::header::HeaderValue::from_static(SDK_SOURCE),
+        );
+        if let Ok(v) = reqwest::header::HeaderValue::from_str(SDK_VERSION) {
+            headers.insert("X-Daytona-SDK-Version", v);
+        }
+        // Add organization header when using JWT (matching Go SDK)
+        if let Some(org_id) = &self.config.organization_id {
+            if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {
+                headers.insert("X-Daytona-Organization-ID", v);
+            }
         }
 
         let client = reqwest::Client::builder()
@@ -274,26 +470,72 @@ fn build_api_config(resolved: &ResolvedConfig) -> ApiConfiguration {
     }
 }
 
-fn build_create_request(params: &CreateParams, config: &ResolvedConfig) -> models::CreateSandbox {
+fn build_create_request(
+    params: &CreateParams,
+    config: &ResolvedConfig,
+) -> Result<models::CreateSandbox, DaytonaError> {
     match params {
         CreateParams::Snapshot(snapshot_params) => {
+            validate_base_params(&snapshot_params.base)?;
             let mut cs = models::CreateSandbox::new();
             cs.snapshot = Some(snapshot_params.snapshot.clone());
             apply_base_params(&mut cs, &snapshot_params.base, config);
-            cs
+            Ok(cs)
         }
         CreateParams::Image(image_params) => {
+            validate_base_params(&image_params.base)?;
             let mut cs = models::CreateSandbox::new();
+            // Set build_info from image source (aligns with Go/TS reference SDKs)
+            let dockerfile_content = match &image_params.image {
+                crate::types::ImageSource::Name(name) => format!("FROM {}", name),
+                crate::types::ImageSource::Custom(docker_image) => docker_image.dockerfile(),
+            };
+            cs.build_info = Some(Box::new(models::CreateBuildInfo::new(dockerfile_content)));
+            // Only set resource fields when > 0 (matching Go/TypeScript SDK behavior)
             if let Some(resources) = &image_params.resources {
-                cs.cpu = resources.cpu;
-                cs.gpu = resources.gpu;
-                cs.memory = resources.memory;
-                cs.disk = resources.disk;
+                if let Some(cpu) = resources.cpu {
+                    if cpu > 0 {
+                        cs.cpu = Some(cpu);
+                    }
+                }
+                if let Some(gpu) = resources.gpu {
+                    if gpu > 0 {
+                        cs.gpu = Some(gpu);
+                    }
+                }
+                if let Some(memory) = resources.memory {
+                    if memory > 0 {
+                        cs.memory = Some(memory);
+                    }
+                }
+                if let Some(disk) = resources.disk {
+                    if disk > 0 {
+                        cs.disk = Some(disk);
+                    }
+                }
             }
             apply_base_params(&mut cs, &image_params.base, config);
-            cs
+            Ok(cs)
         }
     }
+}
+
+fn validate_base_params(base: &crate::types::SandboxBaseParams) -> Result<(), DaytonaError> {
+    if let Some(interval) = base.auto_stop_interval {
+        if interval < 0 {
+            return Err(DaytonaError::general(
+                "autoStopInterval must be a non-negative integer",
+            ));
+        }
+    }
+    if let Some(interval) = base.auto_archive_interval {
+        if interval < 0 {
+            return Err(DaytonaError::general(
+                "autoArchiveInterval must be a non-negative integer",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn apply_base_params(
@@ -305,13 +547,38 @@ fn apply_base_params(
     cs.user = base.user.clone();
     cs.env = base.env_vars.clone();
     cs.labels = base.labels.clone();
-    cs.public = base.public;
+    // Explicitly set public and network_block_all to false when not provided,
+    // matching Go SDK behavior which always sends these fields
+    // (Go booleans default to false; leaving them as None might cause the API
+    // to apply different defaults).
+    cs.public = Some(base.public.unwrap_or(false));
     cs.auto_stop_interval = base.auto_stop_interval;
     cs.auto_archive_interval = base.auto_archive_interval;
-    cs.auto_delete_interval = base.auto_delete_interval;
-    cs.network_block_all = base.network_block_all;
+
+    // Handle ephemeral sandboxes: set auto_delete_interval to 0
+    if base.ephemeral == Some(true) {
+        cs.auto_delete_interval = Some(0);
+    } else {
+        cs.auto_delete_interval = base.auto_delete_interval;
+    }
+
+    cs.network_block_all = Some(base.network_block_all.unwrap_or(false));
     if let Some(allow_list) = &base.network_allow_list {
         cs.network_allow_list = Some(allow_list.join(","));
+    }
+    if let Some(volumes) = &base.volumes {
+        let api_volumes: Vec<models::SandboxVolume> = volumes
+            .iter()
+            .map(|v| {
+                let mut sv = models::SandboxVolume::new(
+                    v.volume_id.clone(),
+                    v.mount_path.clone(),
+                );
+                sv.subpath = v.subpath.clone();
+                sv
+            })
+            .collect();
+        cs.volumes = Some(api_volumes);
     }
     cs.target = config.target.clone();
 }
@@ -506,42 +773,47 @@ mod tests {
     async fn test_client_list_sandboxes() {
         let mock_server = MockServer::start().await;
 
-        let sandboxes_json = serde_json::json!([
-            {
-                "id": "sb-1",
-                "organizationId": "org-1",
-                "name": "sandbox-1",
-                "user": "daytona",
-                "env": {},
-                "labels": {},
-                "public": false,
-                "networkBlockAll": false,
-                "target": "us",
-                "cpu": 2.0,
-                "gpu": 0.0,
-                "memory": 4.0,
-                "disk": 20.0
-            },
-            {
-                "id": "sb-2",
-                "organizationId": "org-1",
-                "name": "sandbox-2",
-                "user": "daytona",
-                "env": {},
-                "labels": {},
-                "public": false,
-                "networkBlockAll": false,
-                "target": "us",
-                "cpu": 2.0,
-                "gpu": 0.0,
-                "memory": 4.0,
-                "disk": 20.0
-            }
-        ]);
+        let paginated_json = serde_json::json!({
+            "items": [
+                {
+                    "id": "sb-1",
+                    "organizationId": "org-1",
+                    "name": "sandbox-1",
+                    "user": "daytona",
+                    "env": {},
+                    "labels": {},
+                    "public": false,
+                    "networkBlockAll": false,
+                    "target": "us",
+                    "cpu": 2.0,
+                    "gpu": 0.0,
+                    "memory": 4.0,
+                    "disk": 20.0
+                },
+                {
+                    "id": "sb-2",
+                    "organizationId": "org-1",
+                    "name": "sandbox-2",
+                    "user": "daytona",
+                    "env": {},
+                    "labels": {},
+                    "public": false,
+                    "networkBlockAll": false,
+                    "target": "us",
+                    "cpu": 2.0,
+                    "gpu": 0.0,
+                    "memory": 4.0,
+                    "disk": 20.0
+                }
+            ],
+            "total": 2.0,
+            "page": 1.0,
+            "totalPages": 1.0
+        });
 
         Mock::given(method("GET"))
-            .and(path("/sandbox"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&sandboxes_json))
+            .and(path("/sandbox/paginated"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
             .mount(&mock_server)
             .await;
 
@@ -551,10 +823,12 @@ mod tests {
             ..Default::default()
         };
         let client = Client::new_with_config(config).await.unwrap();
-        let sandboxes = client.list(None).await.unwrap();
-        assert_eq!(sandboxes.len(), 2);
-        assert_eq!(sandboxes[0].id, "sb-1");
-        assert_eq!(sandboxes[1].id, "sb-2");
+        let result = client.list(None, None, None).await.unwrap();
+        assert_eq!(result.items.len(), 2);
+        assert_eq!(result.items[0].id, "sb-1");
+        assert_eq!(result.items[1].id, "sb-2");
+        assert_eq!(result.total, 2);
+        assert_eq!(result.page, 1);
     }
 
     #[tokio::test]
@@ -642,6 +916,13 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        // GET mock needed because wait_for_start defaults to true
+        Mock::given(method("GET"))
+            .and(path("/sandbox/new-sandbox"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&sandbox_json))
+            .mount(&mock_server)
+            .await;
+
         let config = DaytonaConfig {
             api_key: Some("test-key".to_string()),
             api_url: Some(mock_server.uri()),
@@ -666,6 +947,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_client_create_sandbox_early_error() {
+        let mock_server = MockServer::start().await;
+
+        let sandbox_json = serde_json::json!({
+            "id": "failed-sandbox",
+            "organizationId": "org-1",
+            "name": "my-sandbox",
+            "user": "daytona",
+            "env": {},
+            "labels": {},
+            "public": false,
+            "networkBlockAll": false,
+            "target": "us",
+            "cpu": 2.0,
+            "gpu": 0.0,
+            "memory": 4.0,
+            "disk": 20.0,
+            "state": "error"
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(&sandbox_json))
+            .mount(&mock_server)
+            .await;
+
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+
+        let params = CreateParams::Snapshot(crate::types::SnapshotParams {
+            base: crate::types::SandboxBaseParams::default(),
+            snapshot: "base-snapshot".to_string(),
+        });
+
+        let err = client
+            .create(params, CreateSandboxOptions::default())
+            .await
+            .unwrap_err();
+        assert!(err.message().contains("failed to start"));
+    }
+
+    #[tokio::test]
     async fn test_toolbox_proxy_cache() {
         let mock_server = MockServer::start().await;
 
@@ -687,11 +1014,164 @@ mod tests {
         let client = Client::new_with_config(config).await.unwrap();
 
         // First call should hit the API
-        let url = client.get_toolbox_proxy_url("sb-1").await.unwrap();
+        let url = client.get_toolbox_proxy_url("sb-1", "us").await.unwrap();
         assert!(url.contains("sb-1"));
 
-        // Second call should use cache (mock expects exactly 1 call)
-        let url2 = client.get_toolbox_proxy_url("sb-2").await.unwrap();
+        // Second call with same region should use cache (mock expects exactly 1 call)
+        let url2 = client.get_toolbox_proxy_url("sb-2", "us").await.unwrap();
         assert!(url2.contains("sb-2"));
+    }
+
+    #[tokio::test]
+    async fn test_client_find_one_by_id() {
+        let mock_server = MockServer::start().await;
+
+        let sandbox_json = serde_json::json!({
+            "id": "sandbox-123",
+            "organizationId": "org-1",
+            "name": "test-sandbox",
+            "user": "daytona",
+            "env": {},
+            "labels": {},
+            "public": false,
+            "networkBlockAll": false,
+            "target": "us",
+            "cpu": 2.0,
+            "gpu": 0.0,
+            "memory": 4.0,
+            "disk": 20.0,
+            "state": "started"
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/sandbox-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&sandbox_json))
+            .mount(&mock_server)
+            .await;
+
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let sandbox = client
+            .find_one(Some("sandbox-123"), None)
+            .await
+            .unwrap();
+        assert_eq!(sandbox.id, "sandbox-123");
+    }
+
+    #[tokio::test]
+    async fn test_client_find_one_by_labels() {
+        let mock_server = MockServer::start().await;
+
+        let paginated_json = serde_json::json!({
+            "items": [{
+                "id": "sb-match",
+                "organizationId": "org-1",
+                "name": "matched-sandbox",
+                "user": "daytona",
+                "env": {},
+                "labels": {"env": "prod"},
+                "public": false,
+                "networkBlockAll": false,
+                "target": "us",
+                "cpu": 2.0,
+                "gpu": 0.0,
+                "memory": 4.0,
+                "disk": 20.0,
+                "state": "started"
+            }],
+            "total": 1.0,
+            "page": 1.0,
+            "totalPages": 1.0
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/paginated"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
+            .mount(&mock_server)
+            .await;
+
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let mut labels = HashMap::new();
+        labels.insert("env".to_string(), "prod".to_string());
+        let sandbox = client.find_one(None, Some(&labels)).await.unwrap();
+        assert_eq!(sandbox.id, "sb-match");
+    }
+
+    #[tokio::test]
+    async fn test_client_find_one_not_found() {
+        let mock_server = MockServer::start().await;
+
+        let paginated_json = serde_json::json!({
+            "items": [],
+            "total": 0.0,
+            "page": 1.0,
+            "totalPages": 0.0
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/paginated"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
+            .mount(&mock_server)
+            .await;
+
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let err = client.find_one(None, None).await.unwrap_err();
+        assert!(matches!(err, DaytonaError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_client_get_empty_id() {
+        let mock_server = MockServer::start().await;
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let err = client.get("").await.unwrap_err();
+        assert!(err.message().contains("sandbox ID or name is required"));
+    }
+
+    #[tokio::test]
+    async fn test_client_list_invalid_page() {
+        let mock_server = MockServer::start().await;
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let err = client.list(None, Some(0), None).await.unwrap_err();
+        assert!(err.message().contains("page must be a positive integer"));
+
+        let err = client.list(None, Some(-1), None).await.unwrap_err();
+        assert!(err.message().contains("page must be a positive integer"));
+    }
+
+    #[tokio::test]
+    async fn test_client_list_invalid_limit() {
+        let mock_server = MockServer::start().await;
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let err = client.list(None, None, Some(0)).await.unwrap_err();
+        assert!(err.message().contains("limit must be a positive integer"));
     }
 }

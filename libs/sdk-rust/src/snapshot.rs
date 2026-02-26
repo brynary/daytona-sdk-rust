@@ -1,8 +1,10 @@
 use daytona_api_client::apis::configuration::Configuration as ApiConfig;
 use daytona_api_client::apis::snapshots_api;
+use daytona_api_client::models;
 
 use crate::client::convert_api_error;
 use crate::error::DaytonaError;
+use crate::types::{CreateSnapshotParams, ImageSource};
 
 /// Service for managing snapshots.
 pub struct SnapshotService {
@@ -11,15 +13,19 @@ pub struct SnapshotService {
 }
 
 impl SnapshotService {
-    /// List all snapshots.
+    /// List all snapshots with optional pagination.
+    ///
+    /// Matches Go/TypeScript SDK behavior of accepting `page` and `limit` parameters.
     pub async fn list(
         &self,
+        page: Option<i32>,
+        limit: Option<i32>,
     ) -> Result<daytona_api_client::models::PaginatedSnapshots, DaytonaError> {
         let snapshots = snapshots_api::get_all_snapshots(
             &self.api_config,
             self.org_id.as_deref(),
-            None,
-            None,
+            page.map(|p| p as f64),
+            limit.map(|l| l as f64),
             None,
             None,
             None,
@@ -44,8 +50,68 @@ impl SnapshotService {
         Ok(snapshot)
     }
 
-    /// Create a new snapshot.
+    /// Create a new snapshot from SDK-level params.
+    ///
+    /// Converts `CreateSnapshotParams` into the API model, handling both string
+    /// image names and custom `DockerImage` builders. This is the primary create
+    /// method, matching Go/TypeScript SDK behavior where `Create` accepts
+    /// SDK-level params.
     pub async fn create(
+        &self,
+        params: &CreateSnapshotParams,
+    ) -> Result<daytona_api_client::models::SnapshotDto, DaytonaError> {
+        let mut create_req = models::CreateSnapshot::new(params.name.clone());
+
+        // Handle image: string → image_name, DockerImage → build_info
+        match &params.image {
+            ImageSource::Name(name) => {
+                create_req.image_name = Some(name.clone());
+            }
+            ImageSource::Custom(docker_image) => {
+                create_req.build_info = Some(Box::new(
+                    models::CreateBuildInfo::new(docker_image.dockerfile()),
+                ));
+            }
+        }
+
+        // Handle resources — only set fields when > 0 (matching Go/TypeScript SDK behavior)
+        if let Some(resources) = &params.resources {
+            if let Some(cpu) = resources.cpu {
+                if cpu > 0 {
+                    create_req.cpu = Some(cpu);
+                }
+            }
+            if let Some(gpu) = resources.gpu {
+                if gpu > 0 {
+                    create_req.gpu = Some(gpu);
+                }
+            }
+            if let Some(memory) = resources.memory {
+                if memory > 0 {
+                    create_req.memory = Some(memory);
+                }
+            }
+            if let Some(disk) = resources.disk {
+                if disk > 0 {
+                    create_req.disk = Some(disk);
+                }
+            }
+        }
+
+        // Handle entrypoint
+        if let Some(entrypoint) = &params.entrypoint {
+            create_req.entrypoint = Some(entrypoint.clone());
+        }
+
+        self.create_raw(create_req).await
+    }
+
+    /// Create a new snapshot from raw API params.
+    ///
+    /// For most use cases, prefer [`SnapshotService::create`] which accepts
+    /// SDK-level `CreateSnapshotParams`. This method is for advanced cases
+    /// where you need full control over the API request.
+    pub async fn create_raw(
         &self,
         params: daytona_api_client::models::CreateSnapshot,
     ) -> Result<daytona_api_client::models::SnapshotDto, DaytonaError> {
@@ -110,7 +176,7 @@ mod tests {
             .await;
 
         let svc = snapshot_service(&mock_server).await;
-        let snapshots = svc.list().await.unwrap();
+        let snapshots = svc.list(None, None).await.unwrap();
         assert_eq!(snapshots.items.len(), 2);
     }
 
