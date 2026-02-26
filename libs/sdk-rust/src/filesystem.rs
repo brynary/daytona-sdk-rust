@@ -307,7 +307,7 @@ mod tests {
             .await;
 
         let svc = fs_service(&mock_server).await;
-        let result = svc.search_files("/home", "fn main").await.unwrap();
+        let _result = svc.search_files("/home", "fn main").await.unwrap();
     }
 
     #[tokio::test]

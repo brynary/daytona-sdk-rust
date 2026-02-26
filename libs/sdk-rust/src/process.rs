@@ -474,7 +474,7 @@ mod tests {
             .await;
 
         let svc = process_service(&mock_server).await;
-        let sessions = svc.list_pty_sessions().await.unwrap();
+        let _sessions = svc.list_pty_sessions().await.unwrap();
     }
 
     #[tokio::test]

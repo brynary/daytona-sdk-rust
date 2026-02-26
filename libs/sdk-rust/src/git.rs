@@ -327,7 +327,7 @@ mod tests {
             .await;
 
         let svc = git_service(&mock_server).await;
-        let result = svc.branches("/home/daytona/repo").await.unwrap();
+        let _result = svc.branches("/home/daytona/repo").await.unwrap();
     }
 
     #[tokio::test]

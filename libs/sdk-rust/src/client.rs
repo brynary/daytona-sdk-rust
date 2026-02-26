@@ -625,7 +625,7 @@ pub(crate) fn convert_toolbox_error<T: std::fmt::Debug>(
 mod tests {
     use super::*;
     use std::sync::Mutex;
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());

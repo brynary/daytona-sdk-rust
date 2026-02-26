@@ -103,7 +103,7 @@ impl CodeInterpreterService {
         }
         if let Some(timeout) = &options.timeout {
             exec_req["timeout"] = serde_json::Value::Number(
-                serde_json::Number::from(timeout.as_secs() as u64),
+                serde_json::Number::from(timeout.as_secs()),
             );
         }
 
@@ -350,7 +350,7 @@ mod tests {
             .await;
 
         let svc = interpreter_service(&mock_server).await;
-        let response = svc.list_contexts().await.unwrap();
+        let _response = svc.list_contexts().await.unwrap();
     }
 
     #[tokio::test]
