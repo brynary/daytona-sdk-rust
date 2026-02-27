@@ -53,35 +53,75 @@ impl FileSystemService {
         remote_path: &str,
         local_path: std::path::PathBuf,
     ) -> Result<(), DaytonaError> {
-        file_system_api::upload_file(&self.config, remote_path, local_path)
-            .await
-            .map_err(convert_toolbox_error)?;
-        Ok(())
+        let data = tokio::fs::read(&local_path).await.map_err(|e| {
+            DaytonaError::general(format!("failed to read {}: {}", local_path.display(), e))
+        })?;
+        let filename = local_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        self.upload_multipart(remote_path, data, &filename).await
     }
 
     /// Upload file contents (bytes) to the sandbox.
     ///
     /// Matches Go/TypeScript SDK behavior of accepting raw bytes as the source.
-    /// Internally writes to a temporary file for the upload.
     pub async fn upload_file_bytes(
         &self,
         remote_path: &str,
         data: &[u8],
     ) -> Result<(), DaytonaError> {
-        use std::io::Write;
-
-        let mut tmp = tempfile::NamedTempFile::new()
-            .map_err(|e| DaytonaError::general(format!("failed to create temp file: {}", e)))?;
-        tmp.write_all(data)
-            .map_err(|e| DaytonaError::general(format!("failed to write temp file: {}", e)))?;
-        tmp.flush()
-            .map_err(|e| DaytonaError::general(format!("failed to flush temp file: {}", e)))?;
-
-        let path = tmp.path().to_path_buf();
-        file_system_api::upload_file(&self.config, remote_path, path)
+        let filename = std::path::Path::new(remote_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        self.upload_multipart(remote_path, data.to_vec(), &filename)
             .await
-            .map_err(convert_toolbox_error)?;
-        Ok(())
+    }
+
+    /// Build and send a multipart upload request directly.
+    ///
+    /// The generated `file_system_api::upload_file` never attaches the file to
+    /// the multipart form (it has a TODO comment). This bypasses it entirely.
+    async fn upload_multipart(
+        &self,
+        remote_path: &str,
+        data: Vec<u8>,
+        filename: &str,
+    ) -> Result<(), DaytonaError> {
+        let uri = format!("{}/files/upload", self.config.base_path);
+
+        let part = reqwest::multipart::Part::bytes(data).file_name(filename.to_string());
+        let form = reqwest::multipart::Form::new().part("file", part);
+
+        let mut req_builder = self
+            .config
+            .client
+            .request(reqwest::Method::POST, &uri)
+            .query(&[("path", remote_path)])
+            .multipart(form);
+
+        if let Some(ref token) = self.config.bearer_access_token {
+            req_builder = req_builder.bearer_auth(token);
+        }
+
+        let resp = req_builder
+            .send()
+            .await
+            .map_err(|e| DaytonaError::general(format!("upload request failed: {}", e)))?;
+
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(DaytonaError::general(format!(
+                "upload failed ({}): {}",
+                status, body
+            )))
+        }
     }
 
     /// Download a file from the sandbox as bytes.
@@ -198,7 +238,7 @@ impl FileSystemService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_string_contains, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn fs_service(mock_server: &MockServer) -> FileSystemService {
@@ -377,11 +417,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_upload_file() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/files/upload"))
+            .and(body_string_contains("file content from disk"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&mock_server)
+            .await;
+
+        let svc = fs_service(&mock_server).await;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), b"file content from disk").unwrap();
+        svc.upload_file("/home/daytona/uploaded.txt", tmp.path().to_path_buf())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn test_upload_file_bytes() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
             .and(path("/files/upload"))
+            .and(body_string_contains("Hello from bytes!"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
             .mount(&mock_server)
             .await;

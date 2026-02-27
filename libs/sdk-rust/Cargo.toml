@@ -9,7 +9,7 @@ license = "Apache-2.0"
 daytona-api-client = { path = "../api-client-rust" }
 daytona-toolbox-client = { path = "../toolbox-api-client-rust" }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

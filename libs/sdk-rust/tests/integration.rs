@@ -386,6 +386,64 @@ async fn test_filesystem_download_file() {
 }
 
 #[tokio::test]
+async fn test_filesystem_upload_file_bytes() {
+    let client = create_client().await;
+
+    let sandbox = client
+        .create(ubuntu_image_params(), create_options())
+        .await
+        .expect("create sandbox");
+
+    let fs = sandbox.filesystem().await.expect("filesystem service");
+
+    // Upload via bytes
+    fs.upload_file_bytes("/tmp/upload-test.txt", b"uploaded via bytes")
+        .await
+        .expect("upload file bytes");
+
+    // Download and verify
+    let downloaded = fs.download_file("/tmp/upload-test.txt").await.expect("download file");
+    let content = String::from_utf8(downloaded).expect("valid utf8");
+    assert!(
+        content.contains("uploaded via bytes"),
+        "expected uploaded content, got: {content}"
+    );
+
+    sandbox.delete().await.expect("delete sandbox");
+}
+
+#[tokio::test]
+async fn test_filesystem_upload_file() {
+    let client = create_client().await;
+
+    let sandbox = client
+        .create(ubuntu_image_params(), create_options())
+        .await
+        .expect("create sandbox");
+
+    let fs = sandbox.filesystem().await.expect("filesystem service");
+
+    // Write a local temp file
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), b"uploaded from local file").unwrap();
+
+    // Upload via path
+    fs.upload_file("/tmp/upload-path-test.txt", tmp.path().to_path_buf())
+        .await
+        .expect("upload file");
+
+    // Download and verify
+    let downloaded = fs.download_file("/tmp/upload-path-test.txt").await.expect("download file");
+    let content = String::from_utf8(downloaded).expect("valid utf8");
+    assert!(
+        content.contains("uploaded from local file"),
+        "expected uploaded content, got: {content}"
+    );
+
+    sandbox.delete().await.expect("delete sandbox");
+}
+
+#[tokio::test]
 async fn test_filesystem_create_folder_and_list() {
     let client = create_client().await;
 
