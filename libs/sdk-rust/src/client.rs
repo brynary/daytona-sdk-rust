@@ -598,8 +598,20 @@ pub(crate) fn convert_api_error<T: std::fmt::Debug>(
                 DaytonaError::general(e.to_string())
             }
         }
-        _ => DaytonaError::general(err.to_string()),
+        _ => DaytonaError::general(format_error_chain(&err)),
     }
+}
+
+/// Format an error and its full source chain into a single string.
+fn format_error_chain(err: &dyn std::error::Error) -> String {
+    let mut msg = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        msg.push_str(": ");
+        msg.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    msg
 }
 
 /// Convert a generated toolbox client error to a DaytonaError.
