@@ -629,7 +629,7 @@ pub(crate) fn convert_toolbox_error<T: std::fmt::Debug>(
                 DaytonaError::general(e.to_string())
             }
         }
-        _ => DaytonaError::general(err.to_string()),
+        _ => DaytonaError::general(format_error_chain(&err)),
     }
 }
 
