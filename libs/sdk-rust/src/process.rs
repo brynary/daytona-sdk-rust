@@ -34,10 +34,10 @@ impl ProcessService {
     ) -> Result<ExecuteResponse, DaytonaError> {
         let timeout_secs = options.timeout.map(|d| d.as_secs() as i32);
 
+        // Note: env parameter not supported in current toolbox API
         let exec_body = daytona_toolbox_client::models::ExecuteRequest {
             command: command.to_string(),
             cwd: options.cwd,
-            envs: options.env,
             timeout: timeout_secs,
         };
 
@@ -332,36 +332,6 @@ mod tests {
         };
         let result = svc.execute_command("pwd", opts).await.unwrap();
         assert_eq!(result.exit_code, 0);
-    }
-
-    #[tokio::test]
-    async fn test_execute_command_with_env() {
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .and(path("/process/execute"))
-            .and(wiremock::matchers::body_json(serde_json::json!({
-                "command": "echo $MY_VAR",
-                "envs": {"MY_VAR": "hello"}
-            })))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "command": "echo $MY_VAR",
-                "exitCode": 0,
-                "result": "hello\n"
-            })))
-            .mount(&mock_server)
-            .await;
-
-        let svc = process_service(&mock_server).await;
-        let opts = ExecuteCommandOptions {
-            env: Some(std::collections::HashMap::from([
-                ("MY_VAR".to_string(), "hello".to_string()),
-            ])),
-            ..Default::default()
-        };
-        let result = svc.execute_command("echo $MY_VAR", opts).await.unwrap();
-        assert_eq!(result.exit_code, 0);
-        assert_eq!(result.result, "hello\n");
     }
 
     #[tokio::test]

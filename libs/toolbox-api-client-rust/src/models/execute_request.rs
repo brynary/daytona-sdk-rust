@@ -18,9 +18,6 @@ pub struct ExecuteRequest {
     /// Current working directory
     #[serde(rename = "cwd", skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
-    /// Environment variables to set for the command
-    #[serde(rename = "envs", skip_serializing_if = "Option::is_none")]
-    pub envs: Option<std::collections::HashMap<String, String>>,
     /// Timeout in seconds, defaults to 10 seconds
     #[serde(rename = "timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<i32>,
@@ -31,7 +28,6 @@ impl ExecuteRequest {
         ExecuteRequest {
             command,
             cwd: None,
-            envs: None,
             timeout: None,
         }
     }
