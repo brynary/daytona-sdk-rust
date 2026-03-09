@@ -22,10 +22,7 @@ const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// Returns `None` (no timeout) if `total` is zero, or `Some(remaining)` where
 /// `remaining = max(1ms, total - elapsed)`.  The 1ms floor mirrors the TS SDK's
 /// `Math.max(0.001, timeout - elapsed)` which ensures at least one poll iteration.
-fn remaining_timeout(
-    total: Duration,
-    start: tokio::time::Instant,
-) -> Option<Duration> {
+fn remaining_timeout(total: Duration, start: tokio::time::Instant) -> Option<Duration> {
     if total.is_zero() {
         return None;
     }
@@ -513,13 +510,10 @@ impl Sandbox {
         &self,
         token: &str,
     ) -> Result<models::SshAccessValidationDto, DaytonaError> {
-        let result = sandbox_api::validate_ssh_access(
-            &self.api_config,
-            token,
-            self.org_id.as_deref(),
-        )
-        .await
-        .map_err(convert_api_error)?;
+        let result =
+            sandbox_api::validate_ssh_access(&self.api_config, token, self.org_id.as_deref())
+                .await
+                .map_err(convert_api_error)?;
 
         Ok(result)
     }
@@ -527,10 +521,9 @@ impl Sandbox {
     /// Get the user's home directory path in the sandbox.
     pub async fn get_user_home_dir(&self) -> Result<String, DaytonaError> {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
-        let resp =
-            daytona_toolbox_client::apis::info_api::get_user_home_dir(toolbox_config)
-                .await
-                .map_err(convert_toolbox_error)?;
+        let resp = daytona_toolbox_client::apis::info_api::get_user_home_dir(toolbox_config)
+            .await
+            .map_err(convert_toolbox_error)?;
         Ok(resp.dir)
     }
 
@@ -546,10 +539,9 @@ impl Sandbox {
     /// Get the current working directory in the sandbox.
     pub async fn get_working_dir(&self) -> Result<String, DaytonaError> {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
-        let resp =
-            daytona_toolbox_client::apis::info_api::get_work_dir(toolbox_config)
-                .await
-                .map_err(convert_toolbox_error)?;
+        let resp = daytona_toolbox_client::apis::info_api::get_work_dir(toolbox_config)
+            .await
+            .map_err(convert_toolbox_error)?;
         Ok(resp.dir)
     }
 
@@ -969,7 +961,6 @@ impl Sandbox {
 
                 let client = reqwest::Client::builder()
                     .default_headers(headers)
-                    .timeout(Duration::from_secs(60))
                     .build()
                     .map_err(|e| DaytonaError::general(e.to_string()))?;
 
@@ -1367,8 +1358,8 @@ mod tests {
             .await;
 
         let client = test_client(&mock_server).await;
-        let mut sandbox = client
-            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "error")).unwrap());
+        let mut sandbox =
+            client.sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "error")).unwrap());
         sandbox.recover().await.unwrap();
         assert_eq!(sandbox.state, Some(SandboxState::Started));
     }
@@ -1402,8 +1393,8 @@ mod tests {
             .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "stopped")).unwrap());
         assert_eq!(sandbox.state, Some(SandboxState::Stopped));
 
-        let sandbox = client
-            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "error")).unwrap());
+        let sandbox =
+            client.sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "error")).unwrap());
         assert_eq!(sandbox.state, Some(SandboxState::Error));
     }
 
@@ -1435,7 +1426,9 @@ mod tests {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path("/sandbox/sb-1/ports/3000/signed-preview-url/my-token/expire"))
+            .and(path(
+                "/sandbox/sb-1/ports/3000/signed-preview-url/my-token/expire",
+            ))
             .respond_with(ResponseTemplate::new(200))
             .mount(&mock_server)
             .await;
@@ -1481,9 +1474,7 @@ mod tests {
 
         Mock::given(method("DELETE"))
             .and(path("/sandbox/sb-1/ssh-access"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "started")),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "started")))
             .mount(&mock_server)
             .await;
 

@@ -115,9 +115,7 @@ impl Client {
     /// Get a sandbox by ID or name.
     pub async fn get(&self, sandbox_id_or_name: &str) -> Result<Sandbox, DaytonaError> {
         if sandbox_id_or_name.is_empty() {
-            return Err(DaytonaError::general(
-                "sandbox ID or name is required",
-            ));
+            return Err(DaytonaError::general("sandbox ID or name is required"));
         }
 
         let api_sandbox = sandbox_api::get_sandbox(
@@ -152,24 +150,30 @@ impl Client {
             }
         }
 
-        let labels_json = labels
-            .map(|l| serde_json::to_string(l).unwrap_or_default());
+        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
 
         let result = sandbox_api::list_sandboxes_paginated(
             &self.api_config,
             self.config.organization_id.as_deref(),
             page.map(|p| p as f64),
             limit.map(|l| l as f64),
-            None,        // id
-            None,        // name
+            None, // id
+            None, // name
             labels_json.as_deref(),
-            None,        // include_errored_deleted
-            None,        // states
-            None,        // snapshots
-            None,        // regions
-            None, None, None, None, None, None,
-            None, None,  // last_event_after, last_event_before
-            None, None,  // sort, order
+            None, // include_errored_deleted
+            None, // states
+            None, // snapshots
+            None, // regions
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None, // last_event_after, last_event_before
+            None,
+            None, // sort, order
         )
         .await
         .map_err(convert_api_error)?;
@@ -217,31 +221,39 @@ impl Client {
             }
         }
 
-        let labels_json = labels
-            .map(|l| serde_json::to_string(l).unwrap_or_default());
+        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
 
         let api_sandboxes = sandbox_api::list_sandboxes_paginated(
             &self.api_config,
             self.config.organization_id.as_deref(),
-            Some(1.0),   // page
-            Some(1.0),   // limit
-            None,        // id
-            None,        // name
+            Some(1.0), // page
+            Some(1.0), // limit
+            None,      // id
+            None,      // name
             labels_json.as_deref(),
-            None,        // include_errored_deleted
-            None,        // states
-            None,        // snapshots
-            None,        // regions
-            None, None, None, None, None, None,
-            None, None,  // last_event_after, last_event_before
-            None, None,  // sort, order
+            None, // include_errored_deleted
+            None, // states
+            None, // snapshots
+            None, // regions
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None, // last_event_after, last_event_before
+            None,
+            None, // sort, order
         )
         .await
         .map_err(convert_api_error)?;
 
         let items = api_sandboxes.items;
         if items.is_empty() {
-            return Err(DaytonaError::not_found("no sandbox found matching criteria"));
+            return Err(DaytonaError::not_found(
+                "no sandbox found matching criteria",
+            ));
         }
 
         Ok(self.sandbox_from_api(items.into_iter().next().unwrap()))
@@ -418,7 +430,6 @@ impl Client {
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(60))
             .build()
             .map_err(|e| DaytonaError::general(e.to_string()))?;
 
@@ -570,10 +581,7 @@ fn apply_base_params(
         let api_volumes: Vec<models::SandboxVolume> = volumes
             .iter()
             .map(|v| {
-                let mut sv = models::SandboxVolume::new(
-                    v.volume_id.clone(),
-                    v.mount_path.clone(),
-                );
+                let mut sv = models::SandboxVolume::new(v.volume_id.clone(), v.mount_path.clone());
                 sv.subpath = v.subpath.clone();
                 sv
             })
@@ -1067,10 +1075,7 @@ mod tests {
             ..Default::default()
         };
         let client = Client::new_with_config(config).await.unwrap();
-        let sandbox = client
-            .find_one(Some("sandbox-123"), None)
-            .await
-            .unwrap();
+        let sandbox = client.find_one(Some("sandbox-123"), None).await.unwrap();
         assert_eq!(sandbox.id, "sandbox-123");
     }
 
