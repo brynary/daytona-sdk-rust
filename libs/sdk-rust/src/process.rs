@@ -1,11 +1,20 @@
+use std::future::Future;
+
 use daytona_toolbox_client::apis::configuration::Configuration as ToolboxConfig;
-use daytona_toolbox_client::apis::process_api;
+use daytona_toolbox_client::apis::{process_api, urlencode};
+use futures_util::StreamExt;
+use serde::Deserialize;
+use tokio_tungstenite::tungstenite;
 
 use crate::client::convert_toolbox_error;
 use crate::error::DaytonaError;
 use crate::types::CodeLanguage;
 use crate::types::ExecuteCommandOptions;
 use crate::types::ExecuteResponse;
+
+const STDOUT_PREFIX_BYTES: &[u8] = &[0x01, 0x01, 0x01];
+const STDERR_PREFIX_BYTES: &[u8] = &[0x02, 0x02, 0x02];
+const MAX_PREFIX_LEN: usize = 3;
 
 /// Result of executing a session command.
 #[derive(Debug, Clone)]
@@ -14,10 +23,25 @@ pub struct SessionExecuteResult {
     pub cmd_id: String,
     /// Exit code, present if the command completed synchronously.
     pub exit_code: Option<i32>,
+    /// Combined output, present if the server returned it.
+    pub output: Option<String>,
     /// Standard output, present if the command completed synchronously.
     pub stdout: Option<String>,
     /// Standard error, present if the command completed synchronously.
     pub stderr: Option<String>,
+}
+
+/// Logs for a command executed inside a session.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionCommandLogsResult {
+    /// Combined command output.
+    pub output: String,
+    /// Standard output.
+    pub stdout: String,
+    /// Standard error.
+    pub stderr: String,
+    /// Whether stdout/stderr were separated by the server or demuxed locally.
+    pub streams_separated: bool,
 }
 
 /// Service for executing commands and managing sessions in a sandbox.
@@ -140,6 +164,7 @@ impl ProcessService {
         Ok(SessionExecuteResult {
             cmd_id: result.cmd_id,
             exit_code: result.exit_code,
+            output: result.output,
             stdout: result.stdout,
             stderr: result.stderr,
         })
@@ -183,13 +208,130 @@ impl ProcessService {
         &self,
         session_id: &str,
         command_id: &str,
-        follow: Option<bool>,
-    ) -> Result<String, DaytonaError> {
-        let logs =
-            process_api::get_session_command_logs(&self.config, session_id, command_id, follow)
-                .await
-                .map_err(convert_toolbox_error)?;
-        Ok(logs)
+    ) -> Result<SessionCommandLogsResult, DaytonaError> {
+        let uri = format!(
+            "{}/process/session/{}/command/{}/logs",
+            self.config.base_path,
+            urlencode(session_id),
+            urlencode(command_id)
+        );
+        let mut req_builder = self.config.client.get(&uri);
+        if let Some(user_agent) = &self.config.user_agent {
+            req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+        }
+        req_builder =
+            req_builder.header(reqwest::header::ACCEPT, "application/json, text/plain, */*");
+
+        let resp = req_builder
+            .send()
+            .await
+            .map_err(|e| DaytonaError::general(format!("failed to fetch command logs: {e}")))?;
+        let status = resp.status();
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let body = resp
+            .bytes()
+            .await
+            .map_err(|e| DaytonaError::general(format!("failed to read command logs: {e}")))?;
+
+        if !status.is_success() {
+            let body_text = String::from_utf8_lossy(&body);
+            return Err(DaytonaError::api(
+                status.as_u16(),
+                format!("failed to fetch command logs: {body_text}"),
+            ));
+        }
+
+        Ok(parse_session_command_logs(&body, content_type.as_deref()))
+    }
+
+    /// Stream session command logs through separate stdout/stderr callbacks.
+    pub async fn get_session_command_logs_stream<FOut, FErr, FutOut, FutErr>(
+        &self,
+        session_id: &str,
+        command_id: &str,
+        mut on_stdout: FOut,
+        mut on_stderr: FErr,
+    ) -> Result<(), DaytonaError>
+    where
+        FOut: FnMut(String) -> FutOut + Send,
+        FErr: FnMut(String) -> FutErr + Send,
+        FutOut: Future<Output = Result<(), DaytonaError>> + Send,
+        FutErr: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        let path = format!(
+            "/process/session/{}/command/{}/logs?follow=true",
+            urlencode(session_id),
+            urlencode(command_id)
+        );
+        let ws_url = build_ws_url(&self.config.base_path, &path)?;
+        let mut request = tungstenite::http::Request::builder()
+            .uri(&ws_url)
+            .header("Host", extract_host(&ws_url))
+            .header("Connection", "Upgrade")
+            .header("Upgrade", "websocket")
+            .header("Sec-WebSocket-Version", "13")
+            .header(
+                "Sec-WebSocket-Key",
+                tungstenite::handshake::client::generate_key(),
+            )
+            .header("X-Daytona-Source", "rust-sdk")
+            .header("X-Daytona-SDK-Version", env!("CARGO_PKG_VERSION"));
+
+        if let Some(token) = &self.config.bearer_access_token {
+            request = request.header("Authorization", format!("Bearer {token}"));
+        }
+        if let Some(user_agent) = &self.config.user_agent {
+            request = request.header(reqwest::header::USER_AGENT.as_str(), user_agent);
+        }
+
+        let request = request.body(()).map_err(|e| {
+            DaytonaError::general(format!("failed to build log stream request: {e}"))
+        })?;
+
+        let (ws_stream, _) = tokio_tungstenite::connect_async(request)
+            .await
+            .map_err(|e| DaytonaError::general(format!("failed to connect to log stream: {e}")))?;
+        let (_write, mut read) = ws_stream.split();
+        let mut demux = StdDemux::default();
+
+        while let Some(msg) = read.next().await {
+            let msg = match msg {
+                Ok(m) => m,
+                Err(tungstenite::Error::Protocol(
+                    tungstenite::error::ProtocolError::ResetWithoutClosingHandshake,
+                )) => break,
+                Err(tungstenite::Error::ConnectionClosed) => break,
+                Err(e) => {
+                    return Err(DaytonaError::general(format!("log stream read error: {e}")));
+                }
+            };
+
+            let chunks = match msg {
+                tungstenite::Message::Text(text) => demux.push(text.as_bytes()),
+                tungstenite::Message::Binary(bytes) => demux.push(bytes.as_ref()),
+                tungstenite::Message::Close(_) => break,
+                _ => Vec::new(),
+            };
+            for chunk in chunks {
+                match chunk.stream {
+                    StreamKind::Stdout => on_stdout(chunk.text).await?,
+                    StreamKind::Stderr => on_stderr(chunk.text).await?,
+                }
+            }
+        }
+
+        for chunk in demux.finish() {
+            match chunk.stream {
+                StreamKind::Stdout => on_stdout(chunk.text).await?,
+                StreamKind::Stderr => on_stderr(chunk.text).await?,
+            }
+        }
+
+        Ok(())
     }
 
     /// Create a PTY session.
@@ -206,7 +348,11 @@ impl ProcessService {
             rows: options.size.as_ref().map(|s| s.rows as i32),
             cwd: None,
             envs: options.env,
-            id: if id.is_empty() { None } else { Some(id.to_string()) },
+            id: if id.is_empty() {
+                None
+            } else {
+                Some(id.to_string())
+            },
             lazy_start: None,
         };
         let resp = process_api::create_pty_session(&self.config, req)
@@ -260,6 +406,218 @@ impl ProcessService {
             .map_err(convert_toolbox_error)?;
         Ok(info)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StreamKind {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DemuxChunk {
+    stream: StreamKind,
+    text: String,
+}
+
+#[derive(Default)]
+struct StdDemux {
+    buffer: Vec<u8>,
+    current_kind: Option<StreamKind>,
+    saw_marker: bool,
+}
+
+impl StdDemux {
+    fn push(&mut self, bytes: &[u8]) -> Vec<DemuxChunk> {
+        if bytes.is_empty() {
+            return Vec::new();
+        }
+
+        self.buffer.extend_from_slice(bytes);
+        let mut chunks = Vec::new();
+
+        loop {
+            let safe_len = safe_demux_len(&self.buffer);
+            if safe_len == 0 {
+                break;
+            }
+
+            let safe_region = &self.buffer[..safe_len];
+            let stdout_idx = find_subslice(safe_region, STDOUT_PREFIX_BYTES);
+            let stderr_idx = find_subslice(safe_region, STDERR_PREFIX_BYTES);
+            let next = match (stdout_idx, stderr_idx) {
+                (Some(out), Some(err)) if out <= err => {
+                    Some((out, StreamKind::Stdout, STDOUT_PREFIX_BYTES.len()))
+                }
+                (Some(out), None) => Some((out, StreamKind::Stdout, STDOUT_PREFIX_BYTES.len())),
+                (_, Some(err)) => Some((err, StreamKind::Stderr, STDERR_PREFIX_BYTES.len())),
+                (None, None) => None,
+            };
+
+            match next {
+                Some((idx, next_kind, marker_len)) => {
+                    if idx > 0 {
+                        emit_demux_chunk(self.current_kind, &self.buffer[..idx], &mut chunks);
+                    }
+                    self.buffer.drain(..idx + marker_len);
+                    self.current_kind = Some(next_kind);
+                    self.saw_marker = true;
+                }
+                None => {
+                    emit_demux_chunk(self.current_kind, &self.buffer[..safe_len], &mut chunks);
+                    self.buffer.drain(..safe_len);
+                    break;
+                }
+            }
+        }
+
+        chunks
+    }
+
+    fn finish(mut self) -> Vec<DemuxChunk> {
+        let mut chunks = Vec::new();
+        emit_demux_chunk(self.current_kind, &self.buffer, &mut chunks);
+        self.buffer.clear();
+        chunks
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionCommandLogsBody {
+    output: Option<String>,
+    stdout: Option<String>,
+    stderr: Option<String>,
+}
+
+fn parse_session_command_logs(body: &[u8], content_type: Option<&str>) -> SessionCommandLogsResult {
+    if content_type
+        .map(|ct| ct.contains("application/json"))
+        .unwrap_or(false)
+    {
+        if let Ok(json) = serde_json::from_slice::<SessionCommandLogsBody>(body) {
+            return SessionCommandLogsResult {
+                output: json.output.unwrap_or_default(),
+                stdout: json.stdout.unwrap_or_default(),
+                stderr: json.stderr.unwrap_or_default(),
+                streams_separated: true,
+            };
+        }
+
+        if let Ok(json_string) = serde_json::from_slice::<String>(body) {
+            return parse_plain_or_muxed_logs(json_string.as_bytes());
+        }
+    }
+
+    if let Ok(json) = serde_json::from_slice::<SessionCommandLogsBody>(body) {
+        return SessionCommandLogsResult {
+            output: json.output.unwrap_or_default(),
+            stdout: json.stdout.unwrap_or_default(),
+            stderr: json.stderr.unwrap_or_default(),
+            streams_separated: true,
+        };
+    }
+
+    parse_plain_or_muxed_logs(body)
+}
+
+fn parse_plain_or_muxed_logs(body: &[u8]) -> SessionCommandLogsResult {
+    let mut demux = StdDemux::default();
+    let mut chunks = demux.push(body);
+    let saw_marker = demux.saw_marker;
+    chunks.extend(demux.finish());
+
+    if !saw_marker {
+        let output = String::from_utf8_lossy(body).to_string();
+        return SessionCommandLogsResult {
+            output: output.clone(),
+            stdout: output,
+            stderr: String::new(),
+            streams_separated: false,
+        };
+    }
+
+    let mut result = SessionCommandLogsResult {
+        streams_separated: true,
+        ..Default::default()
+    };
+    for chunk in chunks {
+        result.output.push_str(&chunk.text);
+        match chunk.stream {
+            StreamKind::Stdout => result.stdout.push_str(&chunk.text),
+            StreamKind::Stderr => result.stderr.push_str(&chunk.text),
+        }
+    }
+    result
+}
+
+fn emit_demux_chunk(kind: Option<StreamKind>, bytes: &[u8], chunks: &mut Vec<DemuxChunk>) {
+    if bytes.is_empty() {
+        return;
+    }
+    if let Some(stream) = kind {
+        chunks.push(DemuxChunk {
+            stream,
+            text: String::from_utf8_lossy(bytes).to_string(),
+        });
+    }
+}
+
+fn safe_demux_len(buffer: &[u8]) -> usize {
+    let mut keep = 0;
+    let max_keep = MAX_PREFIX_LEN - 1;
+    for len in 1..=max_keep.min(buffer.len()) {
+        let suffix = &buffer[buffer.len() - len..];
+        if STDOUT_PREFIX_BYTES.starts_with(suffix) || STDERR_PREFIX_BYTES.starts_with(suffix) {
+            keep = keep.max(len);
+        }
+    }
+    buffer.len() - keep
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+/// Convert an HTTP(S) base URL to a WebSocket URL with the given path.
+fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
+    let full = format!("{base_url}{path}");
+    let url =
+        url::Url::parse(&full).map_err(|e| DaytonaError::general(format!("invalid URL: {e}")))?;
+    let scheme = match url.scheme() {
+        "http" => "ws",
+        "https" => "wss",
+        other => {
+            return Err(DaytonaError::general(format!(
+                "unsupported scheme: {other}"
+            )));
+        }
+    };
+    let mut ws_url = url.clone();
+    ws_url
+        .set_scheme(scheme)
+        .map_err(|_| DaytonaError::general("failed to set WebSocket scheme"))?;
+    Ok(ws_url.to_string())
+}
+
+/// Extract the host (with port) from a URL string for the Host header.
+fn extract_host(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| {
+            u.host_str().map(|h| {
+                if let Some(port) = u.port() {
+                    format!("{h}:{port}")
+                } else {
+                    h.to_string()
+                }
+            })
+        })
+        .unwrap_or_default()
 }
 
 /// Shell-escape a string for use in a command, wrapping in single quotes.
@@ -398,25 +756,198 @@ mod tests {
             .unwrap();
         assert_eq!(result.cmd_id, "cmd-sync");
         assert_eq!(result.exit_code, Some(0));
+        assert_eq!(result.output, None);
         assert_eq!(result.stdout.as_deref(), Some("hello\n"));
     }
 
     #[tokio::test]
-    async fn test_get_session_command_logs() {
+    async fn test_get_session_command_logs_json() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
             .and(path("/process/session/sess-1/command/cmd-1/logs"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("line 1\nline 2\n"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(serde_json::json!({
+                        "output": "out\nerr\n",
+                        "stdout": "out\n",
+                        "stderr": "err\n"
+                    })),
+            )
             .mount(&mock_server)
             .await;
 
         let svc = process_service(&mock_server).await;
         let logs = svc
-            .get_session_command_logs("sess-1", "cmd-1", None)
+            .get_session_command_logs("sess-1", "cmd-1")
             .await
             .unwrap();
-        assert!(logs.contains("line 1"));
+        assert_eq!(logs.output, "out\nerr\n");
+        assert_eq!(logs.stdout, "out\n");
+        assert_eq!(logs.stderr, "err\n");
+        assert!(logs.streams_separated);
+    }
+
+    #[tokio::test]
+    async fn test_get_session_command_logs_defaults_missing_json_fields() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/process/session/sess-1/command/cmd-1/logs"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(serde_json::json!({})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let svc = process_service(&mock_server).await;
+        let logs = svc
+            .get_session_command_logs("sess-1", "cmd-1")
+            .await
+            .unwrap();
+        assert_eq!(
+            logs,
+            SessionCommandLogsResult {
+                output: String::new(),
+                stdout: String::new(),
+                stderr: String::new(),
+                streams_separated: true,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_session_command_logs_plain_text_fallback() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/process/session/sess-1/command/cmd-1/logs"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/plain")
+                    .set_body_string("line 1\nline 2\n"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let svc = process_service(&mock_server).await;
+        let logs = svc
+            .get_session_command_logs("sess-1", "cmd-1")
+            .await
+            .unwrap();
+        assert_eq!(logs.output, "line 1\nline 2\n");
+        assert_eq!(logs.stdout, "line 1\nline 2\n");
+        assert_eq!(logs.stderr, "");
+        assert!(!logs.streams_separated);
+    }
+
+    #[test]
+    fn test_parse_muxed_session_command_logs() {
+        let body = [
+            STDOUT_PREFIX_BYTES,
+            b"stdout line 1\n",
+            STDERR_PREFIX_BYTES,
+            b"stderr line 1\n",
+            STDOUT_PREFIX_BYTES,
+            b"stdout line 2\n",
+        ]
+        .concat();
+
+        let logs = parse_plain_or_muxed_logs(&body);
+
+        assert_eq!(logs.output, "stdout line 1\nstderr line 1\nstdout line 2\n");
+        assert_eq!(logs.stdout, "stdout line 1\nstdout line 2\n");
+        assert_eq!(logs.stderr, "stderr line 1\n");
+        assert!(logs.streams_separated);
+    }
+
+    #[test]
+    fn test_demux_handles_split_markers() {
+        let mut demux = StdDemux::default();
+        assert!(demux.push(&[0x01]).is_empty());
+        assert!(demux.push(&[0x01]).is_empty());
+        assert_eq!(
+            demux.push(&[0x01, b'h', b'i']),
+            vec![DemuxChunk {
+                stream: StreamKind::Stdout,
+                text: "hi".to_string(),
+            }]
+        );
+        assert_eq!(demux.finish(), Vec::<DemuxChunk>::new());
+    }
+
+    #[tokio::test]
+    async fn test_get_session_command_logs_stream_demuxes_websocket() {
+        use futures_util::SinkExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            ws.send(tungstenite::Message::Binary(
+                [STDOUT_PREFIX_BYTES, b"hello "].concat().into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(tungstenite::Message::Binary(b"world\n".to_vec().into()))
+                .await
+                .unwrap();
+            ws.send(tungstenite::Message::Binary(
+                [STDERR_PREFIX_BYTES, b"err\n"].concat().into(),
+            ))
+            .await
+            .unwrap();
+            ws.close(None).await.unwrap();
+        });
+
+        let config = ToolboxConfig {
+            base_path: format!("http://{addr}"),
+            client: reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build(),
+            user_agent: None,
+            basic_auth: None,
+            oauth_access_token: None,
+            bearer_access_token: None,
+            api_key: None,
+        };
+        let svc = ProcessService { config };
+        let stdout = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let stderr = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+
+        svc.get_session_command_logs_stream(
+            "sess-1",
+            "cmd-1",
+            {
+                let stdout = stdout.clone();
+                move |chunk| {
+                    let stdout = stdout.clone();
+                    async move {
+                        stdout.lock().await.push_str(&chunk);
+                        Ok(())
+                    }
+                }
+            },
+            {
+                let stderr = stderr.clone();
+                move |chunk| {
+                    let stderr = stderr.clone();
+                    async move {
+                        stderr.lock().await.push_str(&chunk);
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        server.await.unwrap();
+        assert_eq!(&*stdout.lock().await, "hello world\n");
+        assert_eq!(&*stderr.lock().await, "err\n");
     }
 
     #[tokio::test]

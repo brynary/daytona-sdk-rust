@@ -44,7 +44,7 @@ pub use filesystem::FileSystemService;
 pub use git::GitService;
 pub use image::DockerImage;
 pub use lsp::LspService;
-pub use process::{ProcessService, SessionExecuteResult};
+pub use process::{ProcessService, SessionCommandLogsResult, SessionExecuteResult};
 pub use snapshot::SnapshotService;
 pub use volume::VolumeService;
 
