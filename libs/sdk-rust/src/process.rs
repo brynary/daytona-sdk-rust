@@ -7,7 +7,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio_tungstenite::tungstenite;
 
-use crate::client::convert_toolbox_error;
+use crate::client::{convert_toolbox_error, TOOLBOX_SDK_VERSION};
 use crate::error::DaytonaError;
 use crate::types::CodeLanguage;
 use crate::types::ExecuteCommandOptions;
@@ -283,7 +283,8 @@ impl ProcessService {
                 tungstenite::handshake::client::generate_key(),
             )
             .header("X-Daytona-Source", "rust-sdk")
-            .header("X-Daytona-SDK-Version", env!("CARGO_PKG_VERSION"));
+            .header("X-Daytona-SDK-Version", TOOLBOX_SDK_VERSION)
+            .header("X-Daytona-Split-Output", "true");
 
         if let Some(token) = &self.config.bearer_access_token {
             request = request.header("Authorization", format!("Bearer {token}"));

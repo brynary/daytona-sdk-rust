@@ -5,7 +5,7 @@ use daytona_api_client::apis::sandbox_api;
 use daytona_api_client::models;
 use daytona_api_client::models::SandboxState;
 
-use crate::client::{convert_api_error, convert_toolbox_error, Client};
+use crate::client::{convert_api_error, convert_toolbox_error, Client, TOOLBOX_SDK_VERSION};
 use crate::code_interpreter::CodeInterpreterService;
 use crate::computer_use::ComputerUseService;
 use crate::error::DaytonaError;
@@ -949,9 +949,13 @@ impl Sandbox {
                     "X-Daytona-Source",
                     reqwest::header::HeaderValue::from_static("rust-sdk"),
                 );
-                if let Ok(v) = reqwest::header::HeaderValue::from_str(env!("CARGO_PKG_VERSION")) {
+                if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
                     headers.insert("X-Daytona-SDK-Version", v);
                 }
+                headers.insert(
+                    "X-Daytona-Split-Output",
+                    reqwest::header::HeaderValue::from_static("true"),
+                );
                 // Add organization header when using JWT (matching Go SDK)
                 if let Some(org_id) = &config.organization_id {
                     if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {

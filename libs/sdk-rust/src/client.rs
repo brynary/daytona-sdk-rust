@@ -14,6 +14,7 @@ use crate::volume::VolumeService;
 
 const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SDK_SOURCE: &str = "rust-sdk";
+pub(crate) const TOOLBOX_SDK_VERSION: &str = "0.0.0-dev";
 
 /// The main Daytona SDK client.
 pub struct Client {
@@ -418,9 +419,13 @@ impl Client {
             "X-Daytona-Source",
             reqwest::header::HeaderValue::from_static(SDK_SOURCE),
         );
-        if let Ok(v) = reqwest::header::HeaderValue::from_str(SDK_VERSION) {
+        if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
             headers.insert("X-Daytona-SDK-Version", v);
         }
+        headers.insert(
+            "X-Daytona-Split-Output",
+            reqwest::header::HeaderValue::from_static("true"),
+        );
         // Add organization header when using JWT (matching Go SDK)
         if let Some(org_id) = &self.config.organization_id {
             if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {

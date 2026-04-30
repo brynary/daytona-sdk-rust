@@ -3,7 +3,7 @@ use daytona_toolbox_client::apis::interpreter_api;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite;
 
-use crate::client::convert_toolbox_error;
+use crate::client::{convert_toolbox_error, TOOLBOX_SDK_VERSION};
 use crate::error::DaytonaError;
 
 /// An execution error returned by the code interpreter.
@@ -72,7 +72,7 @@ impl CodeInterpreterService {
                 tungstenite::handshake::client::generate_key(),
             )
             .header("X-Daytona-Source", "rust-sdk")
-            .header("X-Daytona-SDK-Version", env!("CARGO_PKG_VERSION"));
+            .header("X-Daytona-SDK-Version", TOOLBOX_SDK_VERSION);
 
         if let Some(token) = &self.config.bearer_access_token {
             request = request.header("Authorization", format!("Bearer {}", token));
