@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Once;
 
 use daytona_toolbox_client::apis::configuration::Configuration as ToolboxConfig;
 use daytona_toolbox_client::apis::{process_api, urlencode};
@@ -15,6 +16,7 @@ use crate::types::ExecuteResponse;
 const STDOUT_PREFIX_BYTES: &[u8] = &[0x01, 0x01, 0x01];
 const STDERR_PREFIX_BYTES: &[u8] = &[0x02, 0x02, 0x02];
 const MAX_PREFIX_LEN: usize = 3;
+static RUSTLS_PROVIDER: Once = Once::new();
 
 /// Result of executing a session command.
 #[derive(Debug, Clone)]
@@ -262,6 +264,8 @@ impl ProcessService {
         FutOut: Future<Output = Result<(), DaytonaError>> + Send,
         FutErr: Future<Output = Result<(), DaytonaError>> + Send,
     {
+        ensure_rustls_crypto_provider();
+
         let path = format!(
             "/process/session/{}/command/{}/logs?follow=true",
             urlencode(session_id),
@@ -618,6 +622,12 @@ fn extract_host(url: &str) -> String {
             })
         })
         .unwrap_or_default()
+}
+
+fn ensure_rustls_crypto_provider() {
+    RUSTLS_PROVIDER.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
 }
 
 /// Shell-escape a string for use in a command, wrapping in single quotes.

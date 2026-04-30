@@ -235,6 +235,7 @@ dependencies = [
  "futures-util",
  "reqwest",
  "reqwest-middleware",
+ "rustls",
  "serde",
  "serde_json",
  "tempfile",
