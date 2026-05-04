@@ -20,7 +20,6 @@ pub(crate) const TOOLBOX_SDK_VERSION: &str = "0.0.0-dev";
 pub struct Client {
     pub(crate) config: ResolvedConfig,
     pub(crate) api_config: ApiConfiguration,
-    pub(crate) _http_client: reqwest::Client,
     pub(crate) toolbox_proxy_cache: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
 
     /// Volume management service.
@@ -41,11 +40,6 @@ impl Client {
         let resolved = resolve_config(&config)?;
         let api_config = build_api_config(&resolved);
 
-        let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
-            .build()
-            .map_err(|e| DaytonaError::general(e.to_string()))?;
-
         let toolbox_proxy_cache = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
 
         let volume = VolumeService {
@@ -61,7 +55,6 @@ impl Client {
         Ok(Client {
             config: resolved,
             api_config,
-            _http_client: http_client,
             toolbox_proxy_cache,
             volume,
             snapshot,
