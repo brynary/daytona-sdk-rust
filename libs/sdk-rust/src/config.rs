@@ -16,6 +16,15 @@ pub struct DaytonaConfig {
     pub organization_id: Option<String>,
     pub api_url: Option<String>,
     pub target: Option<String>,
+    /// Override the `reqwest::Client` used for API and toolbox HTTP calls.
+    /// When `None`, the SDK builds a client internally with SDK
+    /// identification headers and a 60s timeout. When `Some`, the SDK uses
+    /// this client as-is — useful when the caller needs to control the
+    /// proxy policy (e.g. tests against a localhost mock server) or share
+    /// a connection pool. SDK identification headers are skipped in that
+    /// case; bearer auth and per-request headers still flow through the
+    /// generated `Configuration`.
+    pub http_client: Option<reqwest::Client>,
 }
 
 /// Resolved configuration with validated fields.
@@ -26,6 +35,7 @@ pub(crate) struct ResolvedConfig {
     pub organization_id: Option<String>,
     pub api_url: String,
     pub target: Option<String>,
+    pub http_client: Option<reqwest::Client>,
 }
 
 impl ResolvedConfig {
@@ -89,6 +99,7 @@ pub(crate) fn resolve_config(config: &DaytonaConfig) -> Result<ResolvedConfig, D
         organization_id,
         api_url,
         target,
+        http_client: config.http_client.clone(),
     })
 }
 

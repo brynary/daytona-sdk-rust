@@ -433,10 +433,13 @@ impl Client {
             }
         }
 
-        let client = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()
-            .map_err(|e| DaytonaError::general(e.to_string()))?;
+        let client = match self.config.http_client.clone() {
+            Some(injected) => injected,
+            None => reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .map_err(|e| DaytonaError::general(e.to_string()))?,
+        };
 
         let mw_client = reqwest_middleware::ClientBuilder::new(client).build();
 
@@ -467,11 +470,13 @@ fn build_api_config(resolved: &ResolvedConfig) -> ApiConfiguration {
         }
     }
 
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .unwrap_or_default();
+    let client = resolved.http_client.clone().unwrap_or_else(|| {
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .unwrap_or_default()
+    });
 
     let mw_client = reqwest_middleware::ClientBuilder::new(client).build();
 
