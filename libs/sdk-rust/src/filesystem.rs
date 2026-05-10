@@ -289,6 +289,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_files_accepts_large_file_sizes() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/files"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {
+                    "name": "kcore",
+                    "isDir": false,
+                    "size": 72057594021171200_i64,
+                    "modTime": "",
+                    "mode": "0666",
+                    "owner": "root",
+                    "group": "root",
+                    "permissions": "rw-rw-rw-"
+                }
+            ])))
+            .mount(&mock_server)
+            .await;
+
+        let svc = fs_service(&mock_server).await;
+        let files = svc.list_files("/proc").await.unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].name, "kcore");
+        assert_eq!(files[0].size, 72_057_594_021_171_200);
+    }
+
+    #[tokio::test]
     async fn test_delete_file() {
         let mock_server = MockServer::start().await;
 

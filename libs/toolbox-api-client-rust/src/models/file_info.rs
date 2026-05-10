@@ -28,11 +28,11 @@ pub struct FileInfo {
     #[serde(rename = "permissions")]
     pub permissions: String,
     #[serde(rename = "size")]
-    pub size: i32,
+    pub size: i64,
 }
 
 impl FileInfo {
-    pub fn new(group: String, is_dir: bool, mod_time: String, mode: String, name: String, owner: String, permissions: String, size: i32) -> FileInfo {
+    pub fn new(group: String, is_dir: bool, mod_time: String, mode: String, name: String, owner: String, permissions: String, size: i64) -> FileInfo {
         FileInfo {
             group,
             is_dir,
@@ -45,4 +45,3 @@ impl FileInfo {
         }
     }
 }
-
