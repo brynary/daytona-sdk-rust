@@ -50,7 +50,10 @@ pub struct CreateWorkspace {
     #[serde(rename = "autoStopInterval", skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<i32>,
     /// Auto-archive interval in minutes (0 means the maximum interval will be used)
-    #[serde(rename = "autoArchiveInterval", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "autoArchiveInterval",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_archive_interval: Option<i32>,
     /// Array of volumes to attach to the workspace
     #[serde(rename = "volumes", skip_serializing_if = "Option::is_none")]
@@ -113,4 +116,3 @@ impl Default for Target {
         Self::Eu
     }
 }
-

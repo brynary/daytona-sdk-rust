@@ -43,7 +43,12 @@ pub struct AdminCreateRunner {
 }
 
 impl AdminCreateRunner {
-    pub fn new(region_id: String, name: String, api_key: String, api_version: String) -> AdminCreateRunner {
+    pub fn new(
+        region_id: String,
+        name: String,
+        api_key: String,
+        api_version: String,
+    ) -> AdminCreateRunner {
         AdminCreateRunner {
             region_id,
             name,
@@ -58,4 +63,3 @@ impl AdminCreateRunner {
         }
     }
 }
-

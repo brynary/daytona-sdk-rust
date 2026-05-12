@@ -20,9 +20,6 @@ pub struct Url {
 
 impl Url {
     pub fn new(url: String) -> Url {
-        Url {
-            url,
-        }
+        Url { url }
     }
 }
-

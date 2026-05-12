@@ -23,10 +23,6 @@ pub struct CreateLinkedAccount {
 
 impl CreateLinkedAccount {
     pub fn new(provider: String, user_id: String) -> CreateLinkedAccount {
-        CreateLinkedAccount {
-            provider,
-            user_id,
-        }
+        CreateLinkedAccount { provider, user_id }
     }
 }
-

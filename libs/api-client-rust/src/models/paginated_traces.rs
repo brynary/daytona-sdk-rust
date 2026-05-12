@@ -28,7 +28,12 @@ pub struct PaginatedTraces {
 }
 
 impl PaginatedTraces {
-    pub fn new(items: Vec<models::TraceSummary>, total: f64, page: f64, total_pages: f64) -> PaginatedTraces {
+    pub fn new(
+        items: Vec<models::TraceSummary>,
+        total: f64,
+        page: f64,
+        total_pages: f64,
+    ) -> PaginatedTraces {
         PaginatedTraces {
             items,
             total,
@@ -37,4 +42,3 @@ impl PaginatedTraces {
         }
     }
 }
-

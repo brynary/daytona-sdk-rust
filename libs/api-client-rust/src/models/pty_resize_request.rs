@@ -23,10 +23,6 @@ pub struct PtyResizeRequest {
 
 impl PtyResizeRequest {
     pub fn new(cols: f64, rows: f64) -> PtyResizeRequest {
-        PtyResizeRequest {
-            cols,
-            rows,
-        }
+        PtyResizeRequest { cols, rows }
     }
 }
-

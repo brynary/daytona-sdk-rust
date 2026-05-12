@@ -12,7 +12,7 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PaginatedSandboxes {
+pub struct PaginatedSandboxesDeprecated {
     #[serde(rename = "items")]
     pub items: Vec<models::Sandbox>,
     #[serde(rename = "total")]
@@ -23,9 +23,14 @@ pub struct PaginatedSandboxes {
     pub total_pages: f64,
 }
 
-impl PaginatedSandboxes {
-    pub fn new(items: Vec<models::Sandbox>, total: f64, page: f64, total_pages: f64) -> PaginatedSandboxes {
-        PaginatedSandboxes {
+impl PaginatedSandboxesDeprecated {
+    pub fn new(
+        items: Vec<models::Sandbox>,
+        total: f64,
+        page: f64,
+        total_pages: f64,
+    ) -> PaginatedSandboxesDeprecated {
+        PaginatedSandboxesDeprecated {
             items,
             total,
             page,
@@ -33,4 +38,3 @@ impl PaginatedSandboxes {
         }
     }
 }
-

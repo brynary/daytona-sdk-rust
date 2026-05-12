@@ -32,7 +32,16 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn new(name: String, is_dir: bool, size: f64, mod_time: String, mode: String, permissions: String, owner: String, group: String) -> FileInfo {
+    pub fn new(
+        name: String,
+        is_dir: bool,
+        size: f64,
+        mod_time: String,
+        mode: String,
+        permissions: String,
+        owner: String,
+        group: String,
+    ) -> FileInfo {
         FileInfo {
             name,
             is_dir,
@@ -45,4 +54,3 @@ impl FileInfo {
         }
     }
 }
-

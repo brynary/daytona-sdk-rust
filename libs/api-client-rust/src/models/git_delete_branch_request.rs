@@ -21,10 +21,6 @@ pub struct GitDeleteBranchRequest {
 
 impl GitDeleteBranchRequest {
     pub fn new(path: String, name: String) -> GitDeleteBranchRequest {
-        GitDeleteBranchRequest {
-            path,
-            name,
-        }
+        GitDeleteBranchRequest { path, name }
     }
 }
-

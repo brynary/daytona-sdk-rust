@@ -21,7 +21,10 @@ pub struct CreateOrganizationQuota {
     pub total_disk_quota: Option<f64>,
     #[serde(rename = "maxCpuPerSandbox", skip_serializing_if = "Option::is_none")]
     pub max_cpu_per_sandbox: Option<f64>,
-    #[serde(rename = "maxMemoryPerSandbox", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub max_memory_per_sandbox: Option<f64>,
     #[serde(rename = "maxDiskPerSandbox", skip_serializing_if = "Option::is_none")]
     pub max_disk_per_sandbox: Option<f64>,
@@ -48,4 +51,3 @@ impl CreateOrganizationQuota {
         }
     }
 }
-

@@ -14,13 +14,15 @@ pub mod types;
 pub mod volume;
 
 // Core
-pub use client::Client;
+pub use client::{Client, SandboxIterator};
 pub use config::DaytonaConfig;
 pub use error::DaytonaError;
 pub use sandbox::Sandbox;
 
-// Re-export SandboxState from generated client (matches Go/TS enum usage)
-pub use daytona_api_client::models::SandboxState;
+// Re-export sandbox list enums from generated client (matches Go/TS enum usage)
+pub use daytona_api_client::models::{
+    SandboxListSortDirection, SandboxListSortField, SandboxState,
+};
 
 // Re-export sandbox-related enums exposed on the Sandbox struct
 pub use daytona_api_client::models::sandbox::BackupState;
@@ -29,9 +31,9 @@ pub use daytona_api_client::models::sandbox::BackupState;
 pub use types::{
     CodeLanguage, CreateParams, CreateSandboxOptions, CreateSnapshotParams, ExecuteCommandOptions,
     ExecuteResponse, GitCloneOptions, GitCommitOptions, GitDeleteBranchOptions, GitPullOptions,
-    GitPushOptions, ImageParams, ImageSource, PaginatedSandboxes, PreviewLink, PtySessionOptions,
-    PtySize, Resources, RunCodeOptions, SandboxBaseParams, ScreenshotOptions, ScreenshotRegion,
-    SetFilePermissionsOptions, SnapshotParams, VolumeMount,
+    GitPushOptions, ImageParams, ImageSource, ListSandboxesQuery, PaginatedSandboxes, PreviewLink,
+    PtySessionOptions, PtySize, Resources, RunCodeOptions, SandboxBaseParams, ScreenshotOptions,
+    ScreenshotRegion, SetFilePermissionsOptions, SnapshotParams, VolumeMount,
 };
 
 // Service re-exports

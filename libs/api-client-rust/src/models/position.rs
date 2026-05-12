@@ -21,10 +21,6 @@ pub struct Position {
 
 impl Position {
     pub fn new(line: f64, character: f64) -> Position {
-        Position {
-            line,
-            character,
-        }
+        Position { line, character }
     }
 }
-

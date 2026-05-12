@@ -26,7 +26,13 @@ pub struct GitCommitInfo {
 }
 
 impl GitCommitInfo {
-    pub fn new(hash: String, message: String, author: String, email: String, timestamp: String) -> GitCommitInfo {
+    pub fn new(
+        hash: String,
+        message: String,
+        author: String,
+        email: String,
+        timestamp: String,
+    ) -> GitCommitInfo {
         GitCommitInfo {
             hash,
             message,
@@ -36,4 +42,3 @@ impl GitCommitInfo {
         }
     }
 }
-

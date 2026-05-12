@@ -37,7 +37,15 @@ pub struct ApiKeyList {
 }
 
 impl ApiKeyList {
-    pub fn new(name: String, value: String, created_at: String, permissions: Vec<Permissions>, last_used_at: Option<String>, expires_at: Option<String>, user_id: String) -> ApiKeyList {
+    pub fn new(
+        name: String,
+        value: String,
+        created_at: String,
+        permissions: Vec<Permissions>,
+        last_used_at: Option<String>,
+        expires_at: Option<String>,
+        user_id: String,
+    ) -> ApiKeyList {
         ApiKeyList {
             name,
             value,
@@ -89,4 +97,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-

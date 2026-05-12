@@ -23,10 +23,6 @@ pub struct ExecuteResponse {
 
 impl ExecuteResponse {
     pub fn new(exit_code: f64, result: String) -> ExecuteResponse {
-        ExecuteResponse {
-            exit_code,
-            result,
-        }
+        ExecuteResponse { exit_code, result }
     }
 }
-

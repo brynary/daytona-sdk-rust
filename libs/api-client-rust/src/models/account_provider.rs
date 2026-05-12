@@ -21,10 +21,6 @@ pub struct AccountProvider {
 
 impl AccountProvider {
     pub fn new(name: String, display_name: String) -> AccountProvider {
-        AccountProvider {
-            name,
-            display_name,
-        }
+        AccountProvider { name, display_name }
     }
 }
-

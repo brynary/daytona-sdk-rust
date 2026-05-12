@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use daytona_api_client::apis::configuration::Configuration as ApiConfiguration;
@@ -9,7 +9,7 @@ use crate::config::{resolve_config, DaytonaConfig, ResolvedConfig};
 use crate::error::{error_from_response, DaytonaError};
 use crate::sandbox::Sandbox;
 use crate::snapshot::SnapshotService;
-use crate::types::{CreateParams, CreateSandboxOptions, PaginatedSandboxes};
+use crate::types::{CreateParams, CreateSandboxOptions, ListSandboxesQuery};
 use crate::volume::VolumeService;
 
 const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -26,6 +26,88 @@ pub struct Client {
     pub volume: VolumeService,
     /// Snapshot management service.
     pub snapshot: SnapshotService,
+}
+
+/// Async iterator over sandboxes returned by [`Client::list`].
+pub struct SandboxIterator<'a> {
+    client: &'a Client,
+    query: ListSandboxesQuery,
+    cursor: Option<String>,
+    buffer: VecDeque<Sandbox>,
+    exhausted: bool,
+}
+
+impl SandboxIterator<'_> {
+    /// Fetch and return the next sandbox, following cursor pages as needed.
+    pub async fn next(&mut self) -> Result<Option<Sandbox>, DaytonaError> {
+        loop {
+            if let Some(sandbox) = self.buffer.pop_front() {
+                return Ok(Some(sandbox));
+            }
+
+            if self.exhausted {
+                return Ok(None);
+            }
+
+            self.fetch_page().await?;
+        }
+    }
+
+    async fn fetch_page(&mut self) -> Result<(), DaytonaError> {
+        if let Some(limit) = self.query.limit {
+            if limit < 1 {
+                return Err(DaytonaError::general("limit must be a positive integer"));
+            }
+        }
+
+        let labels_json = self
+            .query
+            .labels
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|err| DaytonaError::general(err.to_string()))?;
+
+        let result = sandbox_api::list_sandboxes(
+            &self.client.api_config,
+            self.client.config.organization_id.as_deref(),
+            self.cursor.as_deref(),
+            self.query.limit.map(|l| l as f64),
+            self.query.id.as_deref(),
+            self.query.name.as_deref(),
+            labels_json.as_deref(),
+            None, // include_errored_deleted
+            self.query.states.clone(),
+            self.query.snapshots.clone(),
+            self.query.targets.clone(),
+            self.query.min_cpu.map(|v| v as f64),
+            self.query.max_cpu.map(|v| v as f64),
+            self.query.min_memory_gib.map(|v| v as f64),
+            self.query.max_memory_gib.map(|v| v as f64),
+            self.query.min_disk_gib.map(|v| v as f64),
+            self.query.max_disk_gib.map(|v| v as f64),
+            self.query.is_public,
+            self.query.is_recoverable,
+            self.query.created_at_after.clone(),
+            self.query.created_at_before.clone(),
+            self.query.last_activity_after.clone(),
+            self.query.last_activity_before.clone(),
+            self.query.sort,
+            self.query.order,
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        self.cursor = result.next_cursor.filter(|cursor| !cursor.is_empty());
+        self.exhausted = self.cursor.is_none();
+        self.buffer = result
+            .items
+            .into_iter()
+            .map(|s| self.client.sandbox_from_api(s))
+            .collect();
+
+        Ok(())
+    }
 }
 
 impl Client {
@@ -124,66 +206,18 @@ impl Client {
         Ok(self.sandbox_from_api(api_sandbox))
     }
 
-    /// List sandboxes with optional label filtering and pagination.
+    /// List sandboxes matching an optional query.
     ///
-    /// Returns a paginated result matching the Go/TypeScript SDK behavior.
-    pub async fn list(
-        &self,
-        labels: Option<&HashMap<String, String>>,
-        page: Option<i32>,
-        limit: Option<i32>,
-    ) -> Result<PaginatedSandboxes, DaytonaError> {
-        if let Some(p) = page {
-            if p < 1 {
-                return Err(DaytonaError::general("page must be a positive integer"));
-            }
+    /// Returns an async iterator that follows cursor-based pagination until the
+    /// API returns no next cursor.
+    pub fn list(&self, query: Option<ListSandboxesQuery>) -> SandboxIterator<'_> {
+        SandboxIterator {
+            client: self,
+            query: query.unwrap_or_default(),
+            cursor: None,
+            buffer: VecDeque::new(),
+            exhausted: false,
         }
-        if let Some(l) = limit {
-            if l < 1 {
-                return Err(DaytonaError::general("limit must be a positive integer"));
-            }
-        }
-
-        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
-
-        let result = sandbox_api::list_sandboxes_paginated(
-            &self.api_config,
-            self.config.organization_id.as_deref(),
-            page.map(|p| p as f64),
-            limit.map(|l| l as f64),
-            None, // id
-            None, // name
-            labels_json.as_deref(),
-            None, // include_errored_deleted
-            None, // states
-            None, // snapshots
-            None, // regions
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None, // last_event_after, last_event_before
-            None,
-            None, // sort, order
-        )
-        .await
-        .map_err(convert_api_error)?;
-
-        let items = result
-            .items
-            .into_iter()
-            .map(|s| self.sandbox_from_api(s))
-            .collect();
-
-        Ok(PaginatedSandboxes {
-            items,
-            total: result.total as i64,
-            page: result.page as i64,
-            total_pages: result.total_pages as i64,
-        })
     }
 
     /// Delete a sandbox by ID or name.
@@ -215,42 +249,18 @@ impl Client {
             }
         }
 
-        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
+        let mut iter = self.list(Some(ListSandboxesQuery {
+            labels: labels.cloned(),
+            limit: Some(1),
+            ..Default::default()
+        }));
 
-        let api_sandboxes = sandbox_api::list_sandboxes_paginated(
-            &self.api_config,
-            self.config.organization_id.as_deref(),
-            Some(1.0), // page
-            Some(1.0), // limit
-            None,      // id
-            None,      // name
-            labels_json.as_deref(),
-            None, // include_errored_deleted
-            None, // states
-            None, // snapshots
-            None, // regions
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None, // last_event_after, last_event_before
-            None,
-            None, // sort, order
-        )
-        .await
-        .map_err(convert_api_error)?;
-
-        let items = api_sandboxes.items;
-        if items.is_empty() {
-            return Err(DaytonaError::not_found(
+        match iter.next().await? {
+            Some(sandbox) => Ok(sandbox),
+            None => Err(DaytonaError::not_found(
                 "no sandbox found matching criteria",
-            ));
+            )),
         }
-
-        Ok(self.sandbox_from_api(items.into_iter().next().unwrap()))
     }
 
     /// Start a stopped sandbox and wait for it to reach the started state.
@@ -311,6 +321,7 @@ impl Client {
             &self.api_config,
             sandbox_id_or_name,
             self.config.organization_id.as_deref(),
+            None,
         )
         .await
         .map_err(convert_api_error)?;
@@ -647,8 +658,9 @@ pub(crate) fn convert_toolbox_error<T: std::fmt::Debug>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ListSandboxesQuery;
     use std::sync::Mutex;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -749,6 +761,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": "started"
         });
 
@@ -793,12 +806,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_client_list_sandboxes() {
+    async fn test_client_list_sandboxes_iterates_cursor_pages() {
         let mock_server = MockServer::start().await;
 
-        let paginated_json = serde_json::json!({
-            "items": [
-                {
+        let first_page_json = serde_json::json!({
+            "items": [{
                     "id": "sb-1",
                     "organizationId": "org-1",
                     "name": "sandbox-1",
@@ -811,9 +823,14 @@ mod tests {
                     "cpu": 2.0,
                     "gpu": 0.0,
                     "memory": 4.0,
-                    "disk": 20.0
-                },
-                {
+                    "disk": 20.0,
+                    "toolboxProxyUrl": "https://toolbox.example.com"
+            }],
+            "nextCursor": "cursor-2"
+        });
+
+        let second_page_json = serde_json::json!({
+            "items": [{
                     "id": "sb-2",
                     "organizationId": "org-1",
                     "name": "sandbox-2",
@@ -826,17 +843,27 @@ mod tests {
                     "cpu": 2.0,
                     "gpu": 0.0,
                     "memory": 4.0,
-                    "disk": 20.0
-                }
-            ],
-            "total": 2.0,
-            "page": 1.0,
-            "totalPages": 1.0
+                    "disk": 20.0,
+                    "toolboxProxyUrl": "https://toolbox.example.com"
+            }],
+            "nextCursor": null
         });
 
         Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
+            .and(path("/sandbox"))
+            .and(query_param("limit", "1"))
+            .and(query_param_is_missing("cursor"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&first_page_json))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox"))
+            .and(query_param("limit", "1"))
+            .and(query_param("cursor", "cursor-2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&second_page_json))
+            .expect(1)
             .mount(&mock_server)
             .await;
 
@@ -846,12 +873,81 @@ mod tests {
             ..Default::default()
         };
         let client = Client::new_with_config(config).await.unwrap();
-        let result = client.list(None, None, None).await.unwrap();
-        assert_eq!(result.items.len(), 2);
-        assert_eq!(result.items[0].id, "sb-1");
-        assert_eq!(result.items[1].id, "sb-2");
-        assert_eq!(result.total, 2);
-        assert_eq!(result.page, 1);
+        let mut iter = client.list(Some(ListSandboxesQuery {
+            limit: Some(1),
+            ..Default::default()
+        }));
+
+        assert_eq!(iter.next().await.unwrap().unwrap().id, "sb-1");
+        assert_eq!(iter.next().await.unwrap().unwrap().id, "sb-2");
+        assert!(iter.next().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_client_list_sends_filter_query_params() {
+        let mock_server = MockServer::start().await;
+
+        let response_json = serde_json::json!({
+            "items": [{
+                "id": "sb-filtered",
+                "organizationId": "org-1",
+                "name": "filtered-sandbox",
+                "user": "daytona",
+                "env": {},
+                "labels": {"env": "prod"},
+                "public": false,
+                "networkBlockAll": false,
+                "target": "us",
+                "cpu": 2.0,
+                "gpu": 0.0,
+                "memory": 4.0,
+                "disk": 20.0,
+                "toolboxProxyUrl": "https://toolbox.example.com",
+                "state": "started"
+            }],
+            "nextCursor": null
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox"))
+            .and(query_param("limit", "10"))
+            .and(query_param("labels", "{\"env\":\"prod\"}"))
+            .and(query_param("states", "started"))
+            .and(query_param("regionIds", "us-east"))
+            .and(query_param("minMemoryGib", "4"))
+            .and(query_param("isPublic", "true"))
+            .and(query_param("isRecoverable", "false"))
+            .and(query_param("sort", "lastActivityAt"))
+            .and(query_param("order", "desc"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_json))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = DaytonaConfig {
+            api_key: Some("test-key".to_string()),
+            api_url: Some(mock_server.uri()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        let mut labels = HashMap::new();
+        labels.insert("env".to_string(), "prod".to_string());
+
+        let mut iter = client.list(Some(ListSandboxesQuery {
+            labels: Some(labels),
+            limit: Some(10),
+            states: Some(vec![models::SandboxState::Started]),
+            targets: Some(vec!["us-east".to_string()]),
+            min_memory_gib: Some(4),
+            is_public: Some(true),
+            is_recoverable: Some(false),
+            sort: Some(models::SandboxListSortField::LastActivityAt),
+            order: Some(models::SandboxListSortDirection::Desc),
+            ..Default::default()
+        }));
+
+        assert_eq!(iter.next().await.unwrap().unwrap().id, "sb-filtered");
+        assert!(iter.next().await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -871,7 +967,8 @@ mod tests {
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
-            "disk": 20.0
+            "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com"
         });
 
         Mock::given(method("DELETE"))
@@ -930,6 +1027,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": "started"
         });
 
@@ -987,6 +1085,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": "error"
         });
 
@@ -1063,6 +1162,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": "started"
         });
 
@@ -1101,15 +1201,16 @@ mod tests {
                 "gpu": 0.0,
                 "memory": 4.0,
                 "disk": 20.0,
+                "toolboxProxyUrl": "https://toolbox.example.com",
                 "state": "started"
             }],
-            "total": 1.0,
-            "page": 1.0,
-            "totalPages": 1.0
+            "nextCursor": null
         });
 
         Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
+            .and(path("/sandbox"))
+            .and(query_param("limit", "1"))
+            .and(query_param("labels", "{\"env\":\"prod\"}"))
             .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
             .mount(&mock_server)
             .await;
@@ -1132,13 +1233,12 @@ mod tests {
 
         let paginated_json = serde_json::json!({
             "items": [],
-            "total": 0.0,
-            "page": 1.0,
-            "totalPages": 0.0
+            "nextCursor": null
         });
 
         Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
+            .and(path("/sandbox"))
+            .and(query_param("limit", "1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
             .mount(&mock_server)
             .await;
@@ -1167,22 +1267,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_client_list_invalid_page() {
-        let mock_server = MockServer::start().await;
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let err = client.list(None, Some(0), None).await.unwrap_err();
-        assert!(err.message().contains("page must be a positive integer"));
-
-        let err = client.list(None, Some(-1), None).await.unwrap_err();
-        assert!(err.message().contains("page must be a positive integer"));
-    }
-
-    #[tokio::test]
     async fn test_client_list_invalid_limit() {
         let mock_server = MockServer::start().await;
         let config = DaytonaConfig {
@@ -1191,7 +1275,11 @@ mod tests {
             ..Default::default()
         };
         let client = Client::new_with_config(config).await.unwrap();
-        let err = client.list(None, None, Some(0)).await.unwrap_err();
+        let mut iter = client.list(Some(ListSandboxesQuery {
+            limit: Some(0),
+            ..Default::default()
+        }));
+        let err = iter.next().await.unwrap_err();
         assert!(err.message().contains("limit must be a positive integer"));
     }
 }

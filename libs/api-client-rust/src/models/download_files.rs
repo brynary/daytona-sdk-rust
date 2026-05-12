@@ -20,9 +20,6 @@ pub struct DownloadFiles {
 
 impl DownloadFiles {
     pub fn new(paths: Vec<String>) -> DownloadFiles {
-        DownloadFiles {
-            paths,
-        }
+        DownloadFiles { paths }
     }
 }
-

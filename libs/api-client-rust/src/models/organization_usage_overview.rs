@@ -26,7 +26,13 @@ pub struct OrganizationUsageOverview {
 }
 
 impl OrganizationUsageOverview {
-    pub fn new(region_usage: Vec<models::RegionUsageOverview>, total_snapshot_quota: f64, current_snapshot_usage: f64, total_volume_quota: f64, current_volume_usage: f64) -> OrganizationUsageOverview {
+    pub fn new(
+        region_usage: Vec<models::RegionUsageOverview>,
+        total_snapshot_quota: f64,
+        current_snapshot_usage: f64,
+        total_volume_quota: f64,
+        current_volume_usage: f64,
+    ) -> OrganizationUsageOverview {
         OrganizationUsageOverview {
             region_usage,
             total_snapshot_quota,
@@ -36,4 +42,3 @@ impl OrganizationUsageOverview {
         }
     }
 }
-

@@ -22,10 +22,6 @@ pub struct GitAddRequest {
 
 impl GitAddRequest {
     pub fn new(path: String, files: Vec<String>) -> GitAddRequest {
-        GitAddRequest {
-            path,
-            files,
-        }
+        GitAddRequest { path, files }
     }
 }
-

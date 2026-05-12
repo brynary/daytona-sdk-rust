@@ -23,10 +23,6 @@ pub struct SnapshotManagerCredentials {
 
 impl SnapshotManagerCredentials {
     pub fn new(username: String, password: String) -> SnapshotManagerCredentials {
-        SnapshotManagerCredentials {
-            username,
-            password,
-        }
+        SnapshotManagerCredentials { username, password }
     }
 }
-

@@ -31,7 +31,13 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(id: String, name: String, email: String, public_keys: Vec<models::UserPublicKey>, created_at: String) -> User {
+    pub fn new(
+        id: String,
+        name: String,
+        email: String,
+        public_keys: Vec<models::UserPublicKey>,
+        created_at: String,
+    ) -> User {
         User {
             id,
             name,
@@ -41,4 +47,3 @@ impl User {
         }
     }
 }
-

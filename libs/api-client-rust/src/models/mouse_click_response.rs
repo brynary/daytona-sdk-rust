@@ -23,10 +23,6 @@ pub struct MouseClickResponse {
 
 impl MouseClickResponse {
     pub fn new(x: f64, y: f64) -> MouseClickResponse {
-        MouseClickResponse {
-            x,
-            y,
-        }
+        MouseClickResponse { x, y }
     }
 }
-

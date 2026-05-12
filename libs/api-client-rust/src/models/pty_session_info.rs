@@ -40,7 +40,16 @@ pub struct PtySessionInfo {
 }
 
 impl PtySessionInfo {
-    pub fn new(id: String, cwd: String, envs: serde_json::Value, cols: f64, rows: f64, created_at: String, active: bool, lazy_start: bool) -> PtySessionInfo {
+    pub fn new(
+        id: String,
+        cwd: String,
+        envs: serde_json::Value,
+        cols: f64,
+        rows: f64,
+        created_at: String,
+        active: bool,
+        lazy_start: bool,
+    ) -> PtySessionInfo {
         PtySessionInfo {
             id,
             cwd,
@@ -53,4 +62,3 @@ impl PtySessionInfo {
         }
     }
 }
-

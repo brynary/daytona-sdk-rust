@@ -31,7 +31,13 @@ pub struct ApiKeyResponse {
 }
 
 impl ApiKeyResponse {
-    pub fn new(name: String, value: String, created_at: String, permissions: Vec<Permissions>, expires_at: Option<String>) -> ApiKeyResponse {
+    pub fn new(
+        name: String,
+        value: String,
+        created_at: String,
+        permissions: Vec<Permissions>,
+        expires_at: Option<String>,
+    ) -> ApiKeyResponse {
         ApiKeyResponse {
             name,
             value,
@@ -81,4 +87,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-

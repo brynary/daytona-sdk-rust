@@ -12,16 +12,13 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct WebhookControllerGetStatus200Response {
+pub struct AdminGetWebhookStatus200Response {
     #[serde(rename = "enabled", skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 }
 
-impl WebhookControllerGetStatus200Response {
-    pub fn new() -> WebhookControllerGetStatus200Response {
-        WebhookControllerGetStatus200Response {
-            enabled: None,
-        }
+impl AdminGetWebhookStatus200Response {
+    pub fn new() -> AdminGetWebhookStatus200Response {
+        AdminGetWebhookStatus200Response { enabled: None }
     }
 }
-

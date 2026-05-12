@@ -11,7 +11,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SnapshotState {
     #[serde(rename = "building")]
@@ -30,7 +30,6 @@ pub enum SnapshotState {
     BuildFailed,
     #[serde(rename = "removing")]
     Removing,
-
 }
 
 impl std::fmt::Display for SnapshotState {
@@ -53,4 +52,3 @@ impl Default for SnapshotState {
         Self::Building
     }
 }
-

@@ -25,7 +25,11 @@ pub struct UpdateOrganizationRole {
 }
 
 impl UpdateOrganizationRole {
-    pub fn new(name: String, description: String, permissions: Vec<Permissions>) -> UpdateOrganizationRole {
+    pub fn new(
+        name: String,
+        description: String,
+        permissions: Vec<Permissions>,
+    ) -> UpdateOrganizationRole {
         UpdateOrganizationRole {
             name,
             description,
@@ -73,4 +77,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-

@@ -21,10 +21,6 @@ pub struct GitBranchRequest {
 
 impl GitBranchRequest {
     pub fn new(path: String, name: String) -> GitBranchRequest {
-        GitBranchRequest {
-            path,
-            name,
-        }
+        GitBranchRequest { path, name }
     }
 }
-

@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use daytona_sdk::{
-    Client, CreateParams, CreateSandboxOptions, DaytonaConfig, DaytonaError, SandboxState,
+    Client, CreateParams, CreateSandboxOptions, DaytonaConfig, DaytonaError, ListSandboxesQuery,
+    SandboxState,
 };
 use daytona_sdk::types::{
     ExecuteCommandOptions, GitCloneOptions, GitCommitOptions, ImageParams, ImageSource,
@@ -122,10 +123,11 @@ async fn test_get_nonexistent_sandbox() {
 async fn test_list_sandboxes() {
     let client = create_client().await;
 
-    let result = client.list(None, Some(1), Some(5)).await.expect("list sandboxes");
-    assert!(result.total >= 0);
-    assert!(result.page >= 1);
-    assert!(result.total_pages >= 0);
+    let mut sandboxes = client.list(Some(ListSandboxesQuery {
+        limit: Some(5),
+        ..Default::default()
+    }));
+    let _ = sandboxes.next().await.expect("list sandboxes");
 }
 
 #[tokio::test]
@@ -884,19 +886,19 @@ async fn test_list_with_label_filter() {
         .await
         .expect("create sandbox");
 
-    // List with matching label
-    let result = client
-        .list(Some(&labels), Some(1), Some(10))
-        .await
-        .expect("list with labels");
+    let mut sandboxes = client.list(Some(ListSandboxesQuery {
+        labels: Some(labels.clone()),
+        limit: Some(10),
+        ..Default::default()
+    }));
 
-    assert!(
-        result.total >= 1,
-        "should find at least 1 sandbox with label, got total={}",
-        result.total
-    );
-
-    let found = result.items.iter().any(|s| s.id == sandbox.id);
+    let mut found = false;
+    while let Some(listed_sandbox) = sandboxes.next().await.expect("list with labels") {
+        if listed_sandbox.id == sandbox.id {
+            found = true;
+            break;
+        }
+    }
     assert!(found, "our sandbox should be in the filtered list");
 
     sandbox.delete().await.expect("delete sandbox");
@@ -958,6 +960,9 @@ async fn test_client_with_explicit_config() {
 
     let client = Client::new_with_config(config).await.expect("create client with config");
 
-    let result = client.list(None, Some(1), Some(1)).await.expect("list sandboxes");
-    assert!(result.page >= 1);
+    let mut sandboxes = client.list(Some(ListSandboxesQuery {
+        limit: Some(1),
+        ..Default::default()
+    }));
+    let _ = sandboxes.next().await.expect("list sandboxes");
 }

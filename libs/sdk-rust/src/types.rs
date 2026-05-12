@@ -251,6 +251,53 @@ pub struct PaginatedSandboxes {
     pub total_pages: i64,
 }
 
+/// Query parameters for listing sandboxes with cursor-based pagination.
+#[derive(Debug, Clone, Default)]
+pub struct ListSandboxesQuery {
+    /// Per-page fetch size. This does not limit the total number of sandboxes yielded.
+    pub limit: Option<i32>,
+    /// Filter by ID prefix.
+    pub id: Option<String>,
+    /// Filter by name prefix.
+    pub name: Option<String>,
+    /// Filter by labels.
+    pub labels: Option<HashMap<String, String>>,
+    /// Filter by states.
+    pub states: Option<Vec<daytona_api_client::models::SandboxState>>,
+    /// Filter by snapshot names.
+    pub snapshots: Option<Vec<String>>,
+    /// Filter by target/region IDs.
+    pub targets: Option<Vec<String>>,
+    /// Filter by minimum CPU.
+    pub min_cpu: Option<i32>,
+    /// Filter by maximum CPU.
+    pub max_cpu: Option<i32>,
+    /// Filter by minimum memory in GiB.
+    pub min_memory_gib: Option<i32>,
+    /// Filter by maximum memory in GiB.
+    pub max_memory_gib: Option<i32>,
+    /// Filter by minimum disk in GiB.
+    pub min_disk_gib: Option<i32>,
+    /// Filter by maximum disk in GiB.
+    pub max_disk_gib: Option<i32>,
+    /// Filter by public status.
+    pub is_public: Option<bool>,
+    /// Filter by recoverable status.
+    pub is_recoverable: Option<bool>,
+    /// Include sandboxes created after this timestamp.
+    pub created_at_after: Option<String>,
+    /// Include sandboxes created before this timestamp.
+    pub created_at_before: Option<String>,
+    /// Include sandboxes with last activity after this timestamp.
+    pub last_activity_after: Option<String>,
+    /// Include sandboxes with last activity before this timestamp.
+    pub last_activity_before: Option<String>,
+    /// Sort field.
+    pub sort: Option<daytona_api_client::models::SandboxListSortField>,
+    /// Sort direction.
+    pub order: Option<daytona_api_client::models::SandboxListSortDirection>,
+}
+
 /// Execution output message (from code interpreter).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMessage {

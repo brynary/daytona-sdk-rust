@@ -17,16 +17,36 @@ pub struct CreateRegionResponse {
     #[serde(rename = "id")]
     pub id: String,
     /// Proxy API key for the region
-    #[serde(rename = "proxyApiKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "proxyApiKey",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub proxy_api_key: Option<Option<String>>,
     /// SSH Gateway API key for the region
-    #[serde(rename = "sshGatewayApiKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayApiKey",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_api_key: Option<Option<String>>,
     /// Snapshot Manager username for the region
-    #[serde(rename = "snapshotManagerUsername", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "snapshotManagerUsername",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub snapshot_manager_username: Option<Option<String>>,
     /// Snapshot Manager password for the region
-    #[serde(rename = "snapshotManagerPassword", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "snapshotManagerPassword",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub snapshot_manager_password: Option<Option<String>>,
 }
 
@@ -41,4 +61,3 @@ impl CreateRegionResponse {
         }
     }
 }
-

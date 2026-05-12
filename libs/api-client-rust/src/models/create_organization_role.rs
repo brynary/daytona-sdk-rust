@@ -25,7 +25,11 @@ pub struct CreateOrganizationRole {
 }
 
 impl CreateOrganizationRole {
-    pub fn new(name: String, description: String, permissions: Vec<Permissions>) -> CreateOrganizationRole {
+    pub fn new(
+        name: String,
+        description: String,
+        permissions: Vec<Permissions>,
+    ) -> CreateOrganizationRole {
         CreateOrganizationRole {
             name,
             description,
@@ -73,4 +77,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-

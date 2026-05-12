@@ -20,9 +20,6 @@ pub struct UpdateOrganizationDefaultRegion {
 
 impl UpdateOrganizationDefaultRegion {
     pub fn new(default_region_id: String) -> UpdateOrganizationDefaultRegion {
-        UpdateOrganizationDefaultRegion {
-            default_region_id,
-        }
+        UpdateOrganizationDefaultRegion { default_region_id }
     }
 }
-

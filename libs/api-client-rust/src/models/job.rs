@@ -46,7 +46,14 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new(id: String, r#type: models::JobType, status: models::JobStatus, resource_type: ResourceType, resource_id: String, created_at: String) -> Job {
+    pub fn new(
+        id: String,
+        r#type: models::JobType,
+        status: models::JobStatus,
+        resource_type: ResourceType,
+        resource_id: String,
+        created_at: String,
+    ) -> Job {
         Job {
             id,
             r#type,
@@ -77,4 +84,3 @@ impl Default for ResourceType {
         Self::Sandbox
     }
 }
-

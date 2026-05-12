@@ -34,7 +34,14 @@ pub struct StorageAccessDto {
 }
 
 impl StorageAccessDto {
-    pub fn new(access_key: String, secret: String, session_token: String, storage_url: String, organization_id: String, bucket: String) -> StorageAccessDto {
+    pub fn new(
+        access_key: String,
+        secret: String,
+        session_token: String,
+        storage_url: String,
+        organization_id: String,
+        bucket: String,
+    ) -> StorageAccessDto {
         StorageAccessDto {
             access_key,
             secret,
@@ -45,4 +52,3 @@ impl StorageAccessDto {
         }
     }
 }
-

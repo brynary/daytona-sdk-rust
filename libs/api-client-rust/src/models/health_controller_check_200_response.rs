@@ -15,12 +15,32 @@ use serde::{Deserialize, Serialize};
 pub struct HealthControllerCheck200Response {
     #[serde(rename = "status", skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
-    #[serde(rename = "info", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub info: Option<Option<std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>>>,
-    #[serde(rename = "error", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub error: Option<Option<std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>>>,
+    #[serde(
+        rename = "info",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub info: Option<
+        Option<
+            std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>,
+        >,
+    >,
+    #[serde(
+        rename = "error",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub error: Option<
+        Option<
+            std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>,
+        >,
+    >,
     #[serde(rename = "details", skip_serializing_if = "Option::is_none")]
-    pub details: Option<std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>>,
+    pub details: Option<
+        std::collections::HashMap<String, models::HealthControllerCheck200ResponseInfoValue>,
+    >,
 }
 
 impl HealthControllerCheck200Response {
@@ -33,4 +53,3 @@ impl HealthControllerCheck200Response {
         }
     }
 }
-

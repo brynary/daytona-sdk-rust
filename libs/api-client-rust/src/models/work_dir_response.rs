@@ -19,9 +19,6 @@ pub struct WorkDirResponse {
 
 impl WorkDirResponse {
     pub fn new() -> WorkDirResponse {
-        WorkDirResponse {
-            dir: None,
-        }
+        WorkDirResponse { dir: None }
     }
 }
-

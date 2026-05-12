@@ -20,9 +20,6 @@ pub struct PtyCreateResponse {
 
 impl PtyCreateResponse {
     pub fn new(session_id: String) -> PtyCreateResponse {
-        PtyCreateResponse {
-            session_id,
-        }
+        PtyCreateResponse { session_id }
     }
 }
-

@@ -19,6 +19,10 @@ pub struct AuditLog {
     pub actor_id: String,
     #[serde(rename = "actorEmail")]
     pub actor_email: String,
+    #[serde(rename = "actorApiKeyPrefix", skip_serializing_if = "Option::is_none")]
+    pub actor_api_key_prefix: Option<String>,
+    #[serde(rename = "actorApiKeySuffix", skip_serializing_if = "Option::is_none")]
+    pub actor_api_key_suffix: Option<String>,
     #[serde(rename = "organizationId", skip_serializing_if = "Option::is_none")]
     pub organization_id: Option<String>,
     #[serde(rename = "action")]
@@ -44,11 +48,19 @@ pub struct AuditLog {
 }
 
 impl AuditLog {
-    pub fn new(id: String, actor_id: String, actor_email: String, action: String, created_at: String) -> AuditLog {
+    pub fn new(
+        id: String,
+        actor_id: String,
+        actor_email: String,
+        action: String,
+        created_at: String,
+    ) -> AuditLog {
         AuditLog {
             id,
             actor_id,
             actor_email,
+            actor_api_key_prefix: None,
+            actor_api_key_suffix: None,
             organization_id: None,
             action,
             target_type: None,
@@ -63,4 +75,3 @@ impl AuditLog {
         }
     }
 }
-

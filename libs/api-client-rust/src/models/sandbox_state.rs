@@ -11,8 +11,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// SandboxState : The state of the sandbox
-/// The state of the sandbox
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SandboxState {
     #[serde(rename = "creating")]
@@ -49,7 +48,10 @@ pub enum SandboxState {
     Archiving,
     #[serde(rename = "resizing")]
     Resizing,
-
+    #[serde(rename = "snapshotting")]
+    Snapshotting,
+    #[serde(rename = "forking")]
+    Forking,
 }
 
 impl std::fmt::Display for SandboxState {
@@ -72,6 +74,8 @@ impl std::fmt::Display for SandboxState {
             Self::Archived => write!(f, "archived"),
             Self::Archiving => write!(f, "archiving"),
             Self::Resizing => write!(f, "resizing"),
+            Self::Snapshotting => write!(f, "snapshotting"),
+            Self::Forking => write!(f, "forking"),
         }
     }
 }
@@ -81,4 +85,3 @@ impl Default for SandboxState {
         Self::Creating
     }
 }
-

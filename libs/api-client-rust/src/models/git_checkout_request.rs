@@ -21,10 +21,6 @@ pub struct GitCheckoutRequest {
 
 impl GitCheckoutRequest {
     pub fn new(path: String, branch: String) -> GitCheckoutRequest {
-        GitCheckoutRequest {
-            path,
-            branch,
-        }
+        GitCheckoutRequest { path, branch }
     }
 }
-

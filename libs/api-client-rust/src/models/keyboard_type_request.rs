@@ -23,10 +23,6 @@ pub struct KeyboardTypeRequest {
 
 impl KeyboardTypeRequest {
     pub fn new(text: String) -> KeyboardTypeRequest {
-        KeyboardTypeRequest {
-            text,
-            delay: None,
-        }
+        KeyboardTypeRequest { text, delay: None }
     }
 }
-

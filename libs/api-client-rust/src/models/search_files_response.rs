@@ -19,9 +19,6 @@ pub struct SearchFilesResponse {
 
 impl SearchFilesResponse {
     pub fn new(files: Vec<String>) -> SearchFilesResponse {
-        SearchFilesResponse {
-            files,
-        }
+        SearchFilesResponse { files }
     }
 }
-

@@ -19,9 +19,6 @@ pub struct GitCommitResponse {
 
 impl GitCommitResponse {
     pub fn new(hash: String) -> GitCommitResponse {
-        GitCommitResponse {
-            hash,
-        }
+        GitCommitResponse { hash }
     }
 }
-

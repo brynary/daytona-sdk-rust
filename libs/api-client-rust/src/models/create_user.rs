@@ -19,9 +19,15 @@ pub struct CreateUser {
     pub name: String,
     #[serde(rename = "email", skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(rename = "personalOrganizationQuota", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "personalOrganizationQuota",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub personal_organization_quota: Option<Box<models::CreateOrganizationQuota>>,
-    #[serde(rename = "personalOrganizationDefaultRegionId", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "personalOrganizationDefaultRegionId",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub personal_organization_default_region_id: Option<String>,
     #[serde(rename = "role", skip_serializing_if = "Option::is_none")]
     pub role: Option<Role>,
@@ -42,7 +48,7 @@ impl CreateUser {
         }
     }
 }
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Role {
     #[serde(rename = "admin")]
@@ -56,4 +62,3 @@ impl Default for Role {
         Self::Admin
     }
 }
-

@@ -20,9 +20,6 @@ pub struct PtyListResponse {
 
 impl PtyListResponse {
     pub fn new(sessions: Vec<models::PtySessionInfo>) -> PtyListResponse {
-        PtyListResponse {
-            sessions,
-        }
+        PtyListResponse { sessions }
     }
 }
-

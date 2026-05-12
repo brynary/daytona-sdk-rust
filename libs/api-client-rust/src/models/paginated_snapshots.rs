@@ -24,7 +24,12 @@ pub struct PaginatedSnapshots {
 }
 
 impl PaginatedSnapshots {
-    pub fn new(items: Vec<models::SnapshotDto>, total: f64, page: f64, total_pages: f64) -> PaginatedSnapshots {
+    pub fn new(
+        items: Vec<models::SnapshotDto>,
+        total: f64,
+        page: f64,
+        total_pages: f64,
+    ) -> PaginatedSnapshots {
         PaginatedSnapshots {
             items,
             total,
@@ -33,4 +38,3 @@ impl PaginatedSnapshots {
         }
     }
 }
-

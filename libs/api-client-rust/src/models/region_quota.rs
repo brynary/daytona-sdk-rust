@@ -23,17 +23,44 @@ pub struct RegionQuota {
     pub total_memory_quota: f64,
     #[serde(rename = "totalDiskQuota")]
     pub total_disk_quota: f64,
+    #[serde(rename = "maxCpuPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_memory_per_sandbox: Option<f64>,
+    #[serde(rename = "maxDiskPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxDiskPerNonEphemeralSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_disk_per_non_ephemeral_sandbox: Option<f64>,
 }
 
 impl RegionQuota {
-    pub fn new(organization_id: String, region_id: String, total_cpu_quota: f64, total_memory_quota: f64, total_disk_quota: f64) -> RegionQuota {
+    pub fn new(
+        organization_id: String,
+        region_id: String,
+        total_cpu_quota: f64,
+        total_memory_quota: f64,
+        total_disk_quota: f64,
+        max_cpu_per_sandbox: Option<f64>,
+        max_memory_per_sandbox: Option<f64>,
+        max_disk_per_sandbox: Option<f64>,
+        max_disk_per_non_ephemeral_sandbox: Option<f64>,
+    ) -> RegionQuota {
         RegionQuota {
             organization_id,
             region_id,
             total_cpu_quota,
             total_memory_quota,
             total_disk_quota,
+            max_cpu_per_sandbox,
+            max_memory_per_sandbox,
+            max_disk_per_sandbox,
+            max_disk_per_non_ephemeral_sandbox,
         }
     }
 }
-

@@ -29,7 +29,6 @@ pub enum VolumeState {
     Deleted,
     #[serde(rename = "error")]
     Error,
-
 }
 
 impl std::fmt::Display for VolumeState {
@@ -51,4 +50,3 @@ impl Default for VolumeState {
         Self::Creating
     }
 }
-

@@ -22,9 +22,6 @@ pub struct CreateSnapshot {
     /// The entrypoint command for the snapshot
     #[serde(rename = "entrypoint", skip_serializing_if = "Option::is_none")]
     pub entrypoint: Option<Vec<String>>,
-    /// Whether the snapshot is general
-    #[serde(rename = "general", skip_serializing_if = "Option::is_none")]
-    pub general: Option<bool>,
     /// CPU cores allocated to the resulting sandbox
     #[serde(rename = "cpu", skip_serializing_if = "Option::is_none")]
     pub cpu: Option<i32>,
@@ -51,7 +48,6 @@ impl CreateSnapshot {
             name,
             image_name: None,
             entrypoint: None,
-            general: None,
             cpu: None,
             gpu: None,
             memory: None,
@@ -61,4 +57,3 @@ impl CreateSnapshot {
         }
     }
 }
-
