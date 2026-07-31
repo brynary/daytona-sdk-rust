@@ -74,6 +74,9 @@ pub enum Permissions {
     DeleteColonRunners,
     #[serde(rename = "read:audit_logs")]
     ReadColonAuditLogs,
+    /// Permission added by a newer Daytona API version.
+    #[serde(other)]
+    Unknown,
 }
 
 impl Default for Permissions {
@@ -81,4 +84,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-
