@@ -19,15 +19,50 @@ pub struct UpdateOrganizationRegionQuota {
     pub total_memory_quota: Option<f64>,
     #[serde(rename = "totalDiskQuota", deserialize_with = "Option::deserialize")]
     pub total_disk_quota: Option<f64>,
+    #[serde(
+        rename = "maxCpuPerSandbox",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_cpu_per_sandbox: Option<Option<f64>>,
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_memory_per_sandbox: Option<Option<f64>>,
+    #[serde(
+        rename = "maxDiskPerSandbox",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_disk_per_sandbox: Option<Option<f64>>,
+    #[serde(
+        rename = "maxDiskPerNonEphemeralSandbox",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_disk_per_non_ephemeral_sandbox: Option<Option<f64>>,
 }
 
 impl UpdateOrganizationRegionQuota {
-    pub fn new(total_cpu_quota: Option<f64>, total_memory_quota: Option<f64>, total_disk_quota: Option<f64>) -> UpdateOrganizationRegionQuota {
+    pub fn new(
+        total_cpu_quota: Option<f64>,
+        total_memory_quota: Option<f64>,
+        total_disk_quota: Option<f64>,
+    ) -> UpdateOrganizationRegionQuota {
         UpdateOrganizationRegionQuota {
             total_cpu_quota,
             total_memory_quota,
             total_disk_quota,
+            max_cpu_per_sandbox: None,
+            max_memory_per_sandbox: None,
+            max_disk_per_sandbox: None,
+            max_disk_per_non_ephemeral_sandbox: None,
         }
     }
 }
-

@@ -21,10 +21,6 @@ pub struct CreateRunner {
 
 impl CreateRunner {
     pub fn new(region_id: String, name: String) -> CreateRunner {
-        CreateRunner {
-            region_id,
-            name,
-        }
+        CreateRunner { region_id, name }
     }
 }
-

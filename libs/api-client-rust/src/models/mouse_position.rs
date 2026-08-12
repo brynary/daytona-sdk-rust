@@ -23,10 +23,6 @@ pub struct MousePosition {
 
 impl MousePosition {
     pub fn new(x: f64, y: f64) -> MousePosition {
-        MousePosition {
-            x,
-            y,
-        }
+        MousePosition { x, y }
     }
 }
-

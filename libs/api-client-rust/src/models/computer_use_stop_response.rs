@@ -23,10 +23,6 @@ pub struct ComputerUseStopResponse {
 
 impl ComputerUseStopResponse {
     pub fn new(message: String, status: serde_json::Value) -> ComputerUseStopResponse {
-        ComputerUseStopResponse {
-            message,
-            status,
-        }
+        ComputerUseStopResponse { message, status }
     }
 }
-

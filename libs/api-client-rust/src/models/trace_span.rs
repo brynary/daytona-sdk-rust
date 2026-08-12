@@ -43,7 +43,14 @@ pub struct TraceSpan {
 }
 
 impl TraceSpan {
-    pub fn new(trace_id: String, span_id: String, span_name: String, timestamp: String, duration_ns: f64, span_attributes: std::collections::HashMap<String, String>) -> TraceSpan {
+    pub fn new(
+        trace_id: String,
+        span_id: String,
+        span_name: String,
+        timestamp: String,
+        duration_ns: f64,
+        span_attributes: std::collections::HashMap<String, String>,
+    ) -> TraceSpan {
         TraceSpan {
             trace_id,
             span_id,
@@ -57,4 +64,3 @@ impl TraceSpan {
         }
     }
 }
-

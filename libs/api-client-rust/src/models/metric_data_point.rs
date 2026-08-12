@@ -23,10 +23,6 @@ pub struct MetricDataPoint {
 
 impl MetricDataPoint {
     pub fn new(timestamp: String, value: f64) -> MetricDataPoint {
-        MetricDataPoint {
-            timestamp,
-            value,
-        }
+        MetricDataPoint { timestamp, value }
     }
 }
-

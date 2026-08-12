@@ -15,7 +15,10 @@ use serde::{Deserialize, Serialize};
 pub struct UpdateOrganizationQuota {
     #[serde(rename = "maxCpuPerSandbox", deserialize_with = "Option::deserialize")]
     pub max_cpu_per_sandbox: Option<f64>,
-    #[serde(rename = "maxMemoryPerSandbox", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
     pub max_memory_per_sandbox: Option<f64>,
     #[serde(rename = "maxDiskPerSandbox", deserialize_with = "Option::deserialize")]
     pub max_disk_per_sandbox: Option<f64>,
@@ -25,22 +28,60 @@ pub struct UpdateOrganizationQuota {
     pub max_snapshot_size: Option<f64>,
     #[serde(rename = "volumeQuota", deserialize_with = "Option::deserialize")]
     pub volume_quota: Option<f64>,
-    #[serde(rename = "authenticatedRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "authenticatedRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub authenticated_rate_limit: Option<f64>,
-    #[serde(rename = "sandboxCreateRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxCreateRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_create_rate_limit: Option<f64>,
-    #[serde(rename = "sandboxLifecycleRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxLifecycleRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_lifecycle_rate_limit: Option<f64>,
-    #[serde(rename = "authenticatedRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "authenticatedRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub authenticated_rate_limit_ttl_seconds: Option<f64>,
-    #[serde(rename = "sandboxCreateRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxCreateRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_create_rate_limit_ttl_seconds: Option<f64>,
-    #[serde(rename = "sandboxLifecycleRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxLifecycleRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>,
+    /// Time in minutes before an unused snapshot is deactivated
+    #[serde(
+        rename = "snapshotDeactivationTimeoutMinutes",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub snapshot_deactivation_timeout_minutes: Option<f64>,
 }
 
 impl UpdateOrganizationQuota {
-    pub fn new(max_cpu_per_sandbox: Option<f64>, max_memory_per_sandbox: Option<f64>, max_disk_per_sandbox: Option<f64>, snapshot_quota: Option<f64>, max_snapshot_size: Option<f64>, volume_quota: Option<f64>, authenticated_rate_limit: Option<f64>, sandbox_create_rate_limit: Option<f64>, sandbox_lifecycle_rate_limit: Option<f64>, authenticated_rate_limit_ttl_seconds: Option<f64>, sandbox_create_rate_limit_ttl_seconds: Option<f64>, sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>) -> UpdateOrganizationQuota {
+    pub fn new(
+        max_cpu_per_sandbox: Option<f64>,
+        max_memory_per_sandbox: Option<f64>,
+        max_disk_per_sandbox: Option<f64>,
+        snapshot_quota: Option<f64>,
+        max_snapshot_size: Option<f64>,
+        volume_quota: Option<f64>,
+        authenticated_rate_limit: Option<f64>,
+        sandbox_create_rate_limit: Option<f64>,
+        sandbox_lifecycle_rate_limit: Option<f64>,
+        authenticated_rate_limit_ttl_seconds: Option<f64>,
+        sandbox_create_rate_limit_ttl_seconds: Option<f64>,
+        sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>,
+        snapshot_deactivation_timeout_minutes: Option<f64>,
+    ) -> UpdateOrganizationQuota {
         UpdateOrganizationQuota {
             max_cpu_per_sandbox,
             max_memory_per_sandbox,
@@ -54,7 +95,7 @@ impl UpdateOrganizationQuota {
             authenticated_rate_limit_ttl_seconds,
             sandbox_create_rate_limit_ttl_seconds,
             sandbox_lifecycle_rate_limit_ttl_seconds,
+            snapshot_deactivation_timeout_minutes,
         }
     }
 }
-

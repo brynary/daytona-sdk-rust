@@ -25,7 +25,6 @@ pub enum SandboxDesiredState {
     Resized,
     #[serde(rename = "archived")]
     Archived,
-
 }
 
 impl std::fmt::Display for SandboxDesiredState {
@@ -45,4 +44,3 @@ impl Default for SandboxDesiredState {
         Self::Destroyed
     }
 }
-

@@ -20,9 +20,6 @@ pub struct MouseScrollResponse {
 
 impl MouseScrollResponse {
     pub fn new(success: bool) -> MouseScrollResponse {
-        MouseScrollResponse {
-            success,
-        }
+        MouseScrollResponse { success }
     }
 }
-

@@ -19,10 +19,11 @@ pub struct OrganizationSandboxDefaultLimitedNetworkEgress {
 }
 
 impl OrganizationSandboxDefaultLimitedNetworkEgress {
-    pub fn new(sandbox_default_limited_network_egress: bool) -> OrganizationSandboxDefaultLimitedNetworkEgress {
+    pub fn new(
+        sandbox_default_limited_network_egress: bool,
+    ) -> OrganizationSandboxDefaultLimitedNetworkEgress {
         OrganizationSandboxDefaultLimitedNetworkEgress {
             sandbox_default_limited_network_egress,
         }
     }
 }
-

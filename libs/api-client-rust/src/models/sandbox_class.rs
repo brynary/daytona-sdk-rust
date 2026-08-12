@@ -21,7 +21,6 @@ pub enum SandboxClass {
     Medium,
     #[serde(rename = "large")]
     Large,
-
 }
 
 impl std::fmt::Display for SandboxClass {
@@ -39,4 +38,3 @@ impl Default for SandboxClass {
         Self::Small
     }
 }
-

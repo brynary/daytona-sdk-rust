@@ -19,9 +19,6 @@ pub struct ProjectDirResponse {
 
 impl ProjectDirResponse {
     pub fn new() -> ProjectDirResponse {
-        ProjectDirResponse {
-            dir: None,
-        }
+        ProjectDirResponse { dir: None }
     }
 }
-

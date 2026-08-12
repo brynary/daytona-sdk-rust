@@ -19,9 +19,6 @@ pub struct ListBranchResponse {
 
 impl ListBranchResponse {
     pub fn new(branches: Vec<String>) -> ListBranchResponse {
-        ListBranchResponse {
-            branches,
-        }
+        ListBranchResponse { branches }
     }
 }
-

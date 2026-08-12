@@ -23,10 +23,6 @@ pub struct PosthogConfig {
 
 impl PosthogConfig {
     pub fn new(api_key: String, host: String) -> PosthogConfig {
-        PosthogConfig {
-            api_key,
-            host,
-        }
+        PosthogConfig { api_key, host }
     }
 }
-

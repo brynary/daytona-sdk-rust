@@ -23,10 +23,6 @@ pub struct SshAccessValidationDto {
 
 impl SshAccessValidationDto {
     pub fn new(valid: bool, sandbox_id: String) -> SshAccessValidationDto {
-        SshAccessValidationDto {
-            valid,
-            sandbox_id,
-        }
+        SshAccessValidationDto { valid, sandbox_id }
     }
 }
-

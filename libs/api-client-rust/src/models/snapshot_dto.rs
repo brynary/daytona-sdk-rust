@@ -60,7 +60,22 @@ pub struct SnapshotDto {
 }
 
 impl SnapshotDto {
-    pub fn new(id: String, general: bool, name: String, state: models::SnapshotState, size: Option<f64>, entrypoint: Option<Vec<String>>, cpu: f64, gpu: f64, mem: f64, disk: f64, error_reason: Option<String>, created_at: String, updated_at: String, last_used_at: Option<String>) -> SnapshotDto {
+    pub fn new(
+        id: String,
+        general: bool,
+        name: String,
+        state: models::SnapshotState,
+        size: Option<f64>,
+        entrypoint: Option<Vec<String>>,
+        cpu: f64,
+        gpu: f64,
+        mem: f64,
+        disk: f64,
+        error_reason: Option<String>,
+        created_at: String,
+        updated_at: String,
+        last_used_at: Option<String>,
+    ) -> SnapshotDto {
         SnapshotDto {
             id,
             organization_id: None,
@@ -85,4 +100,3 @@ impl SnapshotDto {
         }
     }
 }
-

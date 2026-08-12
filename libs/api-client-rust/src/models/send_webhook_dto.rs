@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct SendWebhookDto {
     /// The type of event being sent
     #[serde(rename = "eventType")]
-    pub event_type: String,
+    pub event_type: models::WebhookEvent,
     /// The payload data to send
     #[serde(rename = "payload")]
     pub payload: serde_json::Value,
@@ -25,7 +25,7 @@ pub struct SendWebhookDto {
 }
 
 impl SendWebhookDto {
-    pub fn new(event_type: String, payload: serde_json::Value) -> SendWebhookDto {
+    pub fn new(event_type: models::WebhookEvent, payload: serde_json::Value) -> SendWebhookDto {
         SendWebhookDto {
             event_type,
             payload,
@@ -33,4 +33,3 @@ impl SendWebhookDto {
         }
     }
 }
-

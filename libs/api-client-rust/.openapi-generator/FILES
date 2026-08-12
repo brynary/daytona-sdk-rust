@@ -24,6 +24,7 @@ src/apis/workspace_api.rs
 src/lib.rs
 src/models/account_provider.rs
 src/models/admin_create_runner.rs
+src/models/admin_get_webhook_status_200_response.rs
 src/models/announcement.rs
 src/models/api_key_list.rs
 src/models/api_key_response.rs
@@ -50,6 +51,7 @@ src/models/create_region_response.rs
 src/models/create_runner.rs
 src/models/create_runner_response.rs
 src/models/create_sandbox.rs
+src/models/create_sandbox_snapshot.rs
 src/models/create_session_request.rs
 src/models/create_snapshot.rs
 src/models/create_user.rs
@@ -63,6 +65,7 @@ src/models/execute_request.rs
 src/models/execute_response.rs
 src/models/file_info.rs
 src/models/file_status.rs
+src/models/fork_sandbox.rs
 src/models/git_add_request.rs
 src/models/git_branch_request.rs
 src/models/git_checkout_request.rs
@@ -83,6 +86,7 @@ src/models/keyboard_hotkey_request.rs
 src/models/keyboard_press_request.rs
 src/models/keyboard_type_request.rs
 src/models/list_branch_response.rs
+src/models/list_sandboxes_response.rs
 src/models/log_entry.rs
 src/models/lsp_completion_params.rs
 src/models/lsp_document_request.rs
@@ -115,7 +119,7 @@ src/models/otel_config.rs
 src/models/paginated_audit_logs.rs
 src/models/paginated_jobs.rs
 src/models/paginated_logs.rs
-src/models/paginated_sandboxes.rs
+src/models/paginated_sandboxes_deprecated.rs
 src/models/paginated_snapshots.rs
 src/models/paginated_traces.rs
 src/models/poll_jobs_response.rs
@@ -146,9 +150,11 @@ src/models/replace_request.rs
 src/models/replace_result.rs
 src/models/resize_sandbox.rs
 src/models/runner.rs
+src/models/runner_class.rs
 src/models/runner_full.rs
 src/models/runner_health_metrics.rs
 src/models/runner_healthcheck.rs
+src/models/runner_service_health.rs
 src/models/runner_snapshot_dto.rs
 src/models/runner_state.rs
 src/models/sandbox.rs
@@ -156,6 +162,8 @@ src/models/sandbox_class.rs
 src/models/sandbox_desired_state.rs
 src/models/sandbox_info.rs
 src/models/sandbox_labels.rs
+src/models/sandbox_list_sort_direction.rs
+src/models/sandbox_list_sort_field.rs
 src/models/sandbox_state.rs
 src/models/sandbox_volume.rs
 src/models/screenshot_response.rs
@@ -184,6 +192,7 @@ src/models/update_organization_quota.rs
 src/models/update_organization_region_quota.rs
 src/models/update_organization_role.rs
 src/models/update_region.rs
+src/models/update_sandbox_network_settings.rs
 src/models/update_sandbox_state_dto.rs
 src/models/url.rs
 src/models/user.rs
@@ -192,7 +201,7 @@ src/models/user_public_key.rs
 src/models/volume_dto.rs
 src/models/volume_state.rs
 src/models/webhook_app_portal_access.rs
-src/models/webhook_controller_get_status_200_response.rs
+src/models/webhook_event.rs
 src/models/webhook_initialization_status.rs
 src/models/windows_response.rs
 src/models/work_dir_response.rs

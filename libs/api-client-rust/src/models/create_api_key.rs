@@ -20,7 +20,12 @@ pub struct CreateApiKey {
     #[serde(rename = "permissions")]
     pub permissions: Vec<Permissions>,
     /// When the API key expires
-    #[serde(rename = "expiresAt", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "expiresAt",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub expires_at: Option<Option<String>>,
 }
 
@@ -73,4 +78,3 @@ impl Default for Permissions {
         Self::WriteColonRegistries
     }
 }
-

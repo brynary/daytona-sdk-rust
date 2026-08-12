@@ -14,13 +14,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateRegion {
     /// Proxy URL for the region
-    #[serde(rename = "proxyUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "proxyUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub proxy_url: Option<Option<String>>,
     /// SSH Gateway URL for the region
-    #[serde(rename = "sshGatewayUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_url: Option<Option<String>>,
     /// Snapshot Manager URL for the region
-    #[serde(rename = "snapshotManagerUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "snapshotManagerUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub snapshot_manager_url: Option<Option<String>>,
 }
 
@@ -33,4 +48,3 @@ impl UpdateRegion {
         }
     }
 }
-

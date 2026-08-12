@@ -23,10 +23,6 @@ pub struct ProcessLogsResponse {
 
 impl ProcessLogsResponse {
     pub fn new(process_name: String, logs: String) -> ProcessLogsResponse {
-        ProcessLogsResponse {
-            process_name,
-            logs,
-        }
+        ProcessLogsResponse { process_name, logs }
     }
 }
-

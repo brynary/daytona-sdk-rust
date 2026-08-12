@@ -29,7 +29,12 @@ pub struct LspCompletionParams {
 }
 
 impl LspCompletionParams {
-    pub fn new(language_id: String, path_to_project: String, uri: String, position: models::Position) -> LspCompletionParams {
+    pub fn new(
+        language_id: String,
+        path_to_project: String,
+        uri: String,
+        position: models::Position,
+    ) -> LspCompletionParams {
         LspCompletionParams {
             language_id,
             path_to_project,
@@ -39,4 +44,3 @@ impl LspCompletionParams {
         }
     }
 }
-

@@ -20,9 +20,7 @@ pub struct ComputerUseStatusResponse {
 
 impl ComputerUseStatusResponse {
     pub fn new(status: Status) -> ComputerUseStatusResponse {
-        ComputerUseStatusResponse {
-            status,
-        }
+        ComputerUseStatusResponse { status }
     }
 }
 /// Status of computer use services (active, partial, inactive, error)
@@ -43,4 +41,3 @@ impl Default for Status {
         Self::Active
     }
 }
-

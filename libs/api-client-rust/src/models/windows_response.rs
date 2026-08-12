@@ -23,10 +23,6 @@ pub struct WindowsResponse {
 
 impl WindowsResponse {
     pub fn new(windows: Vec<serde_json::Value>, count: f64) -> WindowsResponse {
-        WindowsResponse {
-            windows,
-            count,
-        }
+        WindowsResponse { windows, count }
     }
 }
-

@@ -23,10 +23,6 @@ pub struct WorkspacePortPreviewUrl {
 
 impl WorkspacePortPreviewUrl {
     pub fn new(url: String, token: String) -> WorkspacePortPreviewUrl {
-        WorkspacePortPreviewUrl {
-            url,
-            token,
-        }
+        WorkspacePortPreviewUrl { url, token }
     }
 }
-

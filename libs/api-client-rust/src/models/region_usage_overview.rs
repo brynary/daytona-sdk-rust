@@ -27,10 +27,36 @@ pub struct RegionUsageOverview {
     pub total_disk_quota: f64,
     #[serde(rename = "currentDiskUsage")]
     pub current_disk_usage: f64,
+    #[serde(rename = "maxCpuPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_memory_per_sandbox: Option<f64>,
+    #[serde(rename = "maxDiskPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxDiskPerNonEphemeralSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_disk_per_non_ephemeral_sandbox: Option<f64>,
 }
 
 impl RegionUsageOverview {
-    pub fn new(region_id: String, total_cpu_quota: f64, current_cpu_usage: f64, total_memory_quota: f64, current_memory_usage: f64, total_disk_quota: f64, current_disk_usage: f64) -> RegionUsageOverview {
+    pub fn new(
+        region_id: String,
+        total_cpu_quota: f64,
+        current_cpu_usage: f64,
+        total_memory_quota: f64,
+        current_memory_usage: f64,
+        total_disk_quota: f64,
+        current_disk_usage: f64,
+        max_cpu_per_sandbox: Option<f64>,
+        max_memory_per_sandbox: Option<f64>,
+        max_disk_per_sandbox: Option<f64>,
+        max_disk_per_non_ephemeral_sandbox: Option<f64>,
+    ) -> RegionUsageOverview {
         RegionUsageOverview {
             region_id,
             total_cpu_quota,
@@ -39,7 +65,10 @@ impl RegionUsageOverview {
             current_memory_usage,
             total_disk_quota,
             current_disk_usage,
+            max_cpu_per_sandbox,
+            max_memory_per_sandbox,
+            max_disk_per_sandbox,
+            max_disk_per_non_ephemeral_sandbox,
         }
     }
 }
-

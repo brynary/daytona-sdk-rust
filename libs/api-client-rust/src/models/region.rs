@@ -20,7 +20,12 @@ pub struct Region {
     #[serde(rename = "name")]
     pub name: String,
     /// Organization ID
-    #[serde(rename = "organizationId", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "organizationId",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub organization_id: Option<Option<String>>,
     /// The type of the region
     #[serde(rename = "regionType")]
@@ -32,18 +37,39 @@ pub struct Region {
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
     /// Proxy URL for the region
-    #[serde(rename = "proxyUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "proxyUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub proxy_url: Option<Option<String>>,
     /// SSH Gateway URL for the region
-    #[serde(rename = "sshGatewayUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_url: Option<Option<String>>,
     /// Snapshot Manager URL for the region
-    #[serde(rename = "snapshotManagerUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "snapshotManagerUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub snapshot_manager_url: Option<Option<String>>,
 }
 
 impl Region {
-    pub fn new(id: String, name: String, region_type: models::RegionType, created_at: String, updated_at: String) -> Region {
+    pub fn new(
+        id: String,
+        name: String,
+        region_type: models::RegionType,
+        created_at: String,
+        updated_at: String,
+    ) -> Region {
         Region {
             id,
             name,
@@ -57,4 +83,3 @@ impl Region {
         }
     }
 }
-

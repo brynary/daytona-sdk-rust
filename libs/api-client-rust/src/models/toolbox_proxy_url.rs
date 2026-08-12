@@ -20,9 +20,6 @@ pub struct ToolboxProxyUrl {
 
 impl ToolboxProxyUrl {
     pub fn new(url: String) -> ToolboxProxyUrl {
-        ToolboxProxyUrl {
-            url,
-        }
+        ToolboxProxyUrl { url }
     }
 }
-

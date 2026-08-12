@@ -16,6 +16,9 @@ pub struct RunnerHealthcheck {
     /// Runner metrics
     #[serde(rename = "metrics", skip_serializing_if = "Option::is_none")]
     pub metrics: Option<Box<models::RunnerHealthMetrics>>,
+    /// Health status of individual services on the runner
+    #[serde(rename = "serviceHealth", skip_serializing_if = "Option::is_none")]
+    pub service_health: Option<Vec<models::RunnerServiceHealth>>,
     /// Runner domain
     #[serde(rename = "domain", skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
@@ -34,6 +37,7 @@ impl RunnerHealthcheck {
     pub fn new(app_version: String) -> RunnerHealthcheck {
         RunnerHealthcheck {
             metrics: None,
+            service_health: None,
             domain: None,
             proxy_url: None,
             api_url: None,
@@ -41,4 +45,3 @@ impl RunnerHealthcheck {
         }
     }
 }
-

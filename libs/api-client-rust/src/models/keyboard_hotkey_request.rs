@@ -20,9 +20,6 @@ pub struct KeyboardHotkeyRequest {
 
 impl KeyboardHotkeyRequest {
     pub fn new(keys: String) -> KeyboardHotkeyRequest {
-        KeyboardHotkeyRequest {
-            keys,
-        }
+        KeyboardHotkeyRequest { keys }
     }
 }
-

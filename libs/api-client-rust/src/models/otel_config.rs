@@ -17,7 +17,12 @@ pub struct OtelConfig {
     #[serde(rename = "endpoint")]
     pub endpoint: String,
     /// Headers
-    #[serde(rename = "headers", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "headers",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub headers: Option<Option<std::collections::HashMap<String, String>>>,
 }
 
@@ -29,4 +34,3 @@ impl OtelConfig {
         }
     }
 }
-

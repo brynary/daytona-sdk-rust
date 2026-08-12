@@ -20,9 +20,6 @@ pub struct RegenerateApiKeyResponse {
 
 impl RegenerateApiKeyResponse {
     pub fn new(api_key: String) -> RegenerateApiKeyResponse {
-        RegenerateApiKeyResponse {
-            api_key,
-        }
+        RegenerateApiKeyResponse { api_key }
     }
 }
-

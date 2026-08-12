@@ -179,7 +179,7 @@ impl Sandbox {
     pub async fn stop_with_timeout(&mut self, timeout: Duration) -> Result<(), DaytonaError> {
         let start_time = tokio::time::Instant::now();
         let api_sandbox =
-            sandbox_api::stop_sandbox(&self.api_config, &self.id, self.org_id.as_deref())
+            sandbox_api::stop_sandbox(&self.api_config, &self.id, self.org_id.as_deref(), None)
                 .await
                 .map_err(convert_api_error)?;
         // Update local state immediately from the API response (matching TS behavior)
@@ -226,7 +226,7 @@ impl Sandbox {
     pub async fn recover_with_timeout(&mut self, timeout: Duration) -> Result<(), DaytonaError> {
         let start_time = tokio::time::Instant::now();
         let api_sandbox =
-            sandbox_api::recover_sandbox(&self.api_config, &self.id, self.org_id.as_deref())
+            sandbox_api::recover_sandbox(&self.api_config, &self.id, self.org_id.as_deref(), None)
                 .await
                 .map_err(convert_api_error)?;
         // Update local state immediately from the API response (matching TS behavior)
@@ -1005,6 +1005,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": state
         })
     }
@@ -1200,6 +1201,7 @@ mod tests {
             "gpu": 0.0,
             "memory": 4.0,
             "disk": 20.0,
+            "toolboxProxyUrl": "https://toolbox.example.com",
             "state": "error",
             "recoverable": true,
             "backupState": "Completed",

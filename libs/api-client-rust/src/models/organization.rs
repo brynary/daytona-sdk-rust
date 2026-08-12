@@ -55,6 +55,9 @@ pub struct Organization {
     /// Max disk per sandbox
     #[serde(rename = "maxDiskPerSandbox")]
     pub max_disk_per_sandbox: f64,
+    /// Time in minutes before an unused snapshot is deactivated
+    #[serde(rename = "snapshotDeactivationTimeoutMinutes")]
+    pub snapshot_deactivation_timeout_minutes: f64,
     /// Sandbox default network block all
     #[serde(rename = "sandboxLimitedNetworkEgress")]
     pub sandbox_limited_network_egress: bool,
@@ -62,30 +65,76 @@ pub struct Organization {
     #[serde(rename = "defaultRegionId", skip_serializing_if = "Option::is_none")]
     pub default_region_id: Option<String>,
     /// Authenticated rate limit per minute
-    #[serde(rename = "authenticatedRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "authenticatedRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub authenticated_rate_limit: Option<f64>,
     /// Sandbox create rate limit per minute
-    #[serde(rename = "sandboxCreateRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxCreateRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_create_rate_limit: Option<f64>,
     /// Sandbox lifecycle rate limit per minute
-    #[serde(rename = "sandboxLifecycleRateLimit", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxLifecycleRateLimit",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_lifecycle_rate_limit: Option<f64>,
     /// Experimental configuration
     #[serde(rename = "experimentalConfig")]
     pub experimental_config: serde_json::Value,
+    /// OpenTelemetry collection configuration
+    #[serde(rename = "otelConfig", deserialize_with = "Option::deserialize")]
+    pub otel_config: Option<Box<models::OtelConfig>>,
     /// Authenticated rate limit TTL in seconds
-    #[serde(rename = "authenticatedRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "authenticatedRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub authenticated_rate_limit_ttl_seconds: Option<f64>,
     /// Sandbox create rate limit TTL in seconds
-    #[serde(rename = "sandboxCreateRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxCreateRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_create_rate_limit_ttl_seconds: Option<f64>,
     /// Sandbox lifecycle rate limit TTL in seconds
-    #[serde(rename = "sandboxLifecycleRateLimitTtlSeconds", deserialize_with = "Option::deserialize")]
+    #[serde(
+        rename = "sandboxLifecycleRateLimitTtlSeconds",
+        deserialize_with = "Option::deserialize"
+    )]
     pub sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>,
 }
 
 impl Organization {
-    pub fn new(id: String, name: String, created_by: String, personal: bool, created_at: String, updated_at: String, suspended: bool, suspended_at: String, suspension_reason: String, suspended_until: String, suspension_cleanup_grace_period_hours: f64, max_cpu_per_sandbox: f64, max_memory_per_sandbox: f64, max_disk_per_sandbox: f64, sandbox_limited_network_egress: bool, authenticated_rate_limit: Option<f64>, sandbox_create_rate_limit: Option<f64>, sandbox_lifecycle_rate_limit: Option<f64>, experimental_config: serde_json::Value, authenticated_rate_limit_ttl_seconds: Option<f64>, sandbox_create_rate_limit_ttl_seconds: Option<f64>, sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>) -> Organization {
+    pub fn new(
+        id: String,
+        name: String,
+        created_by: String,
+        personal: bool,
+        created_at: String,
+        updated_at: String,
+        suspended: bool,
+        suspended_at: String,
+        suspension_reason: String,
+        suspended_until: String,
+        suspension_cleanup_grace_period_hours: f64,
+        max_cpu_per_sandbox: f64,
+        max_memory_per_sandbox: f64,
+        max_disk_per_sandbox: f64,
+        snapshot_deactivation_timeout_minutes: f64,
+        sandbox_limited_network_egress: bool,
+        authenticated_rate_limit: Option<f64>,
+        sandbox_create_rate_limit: Option<f64>,
+        sandbox_lifecycle_rate_limit: Option<f64>,
+        experimental_config: serde_json::Value,
+        otel_config: Option<models::OtelConfig>,
+        authenticated_rate_limit_ttl_seconds: Option<f64>,
+        sandbox_create_rate_limit_ttl_seconds: Option<f64>,
+        sandbox_lifecycle_rate_limit_ttl_seconds: Option<f64>,
+    ) -> Organization {
         Organization {
             id,
             name,
@@ -101,16 +150,21 @@ impl Organization {
             max_cpu_per_sandbox,
             max_memory_per_sandbox,
             max_disk_per_sandbox,
+            snapshot_deactivation_timeout_minutes,
             sandbox_limited_network_egress,
             default_region_id: None,
             authenticated_rate_limit,
             sandbox_create_rate_limit,
             sandbox_lifecycle_rate_limit,
             experimental_config,
+            otel_config: if let Some(x) = otel_config {
+                Some(Box::new(x))
+            } else {
+                None
+            },
             authenticated_rate_limit_ttl_seconds,
             sandbox_create_rate_limit_ttl_seconds,
             sandbox_lifecycle_rate_limit_ttl_seconds,
         }
     }
 }
-

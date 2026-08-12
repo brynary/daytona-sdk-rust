@@ -39,7 +39,10 @@ pub enum JobType {
     RemoveSnapshot,
     #[serde(rename = "UPDATE_SANDBOX_NETWORK_SETTINGS")]
     UpdateSandboxNetworkSettings,
-
+    #[serde(rename = "SNAPSHOT_SANDBOX")]
+    SnapshotSandbox,
+    #[serde(rename = "FORK_SANDBOX")]
+    ForkSandbox,
 }
 
 impl std::fmt::Display for JobType {
@@ -57,6 +60,8 @@ impl std::fmt::Display for JobType {
             Self::InspectSnapshotInRegistry => write!(f, "INSPECT_SNAPSHOT_IN_REGISTRY"),
             Self::RemoveSnapshot => write!(f, "REMOVE_SNAPSHOT"),
             Self::UpdateSandboxNetworkSettings => write!(f, "UPDATE_SANDBOX_NETWORK_SETTINGS"),
+            Self::SnapshotSandbox => write!(f, "SNAPSHOT_SANDBOX"),
+            Self::ForkSandbox => write!(f, "FORK_SANDBOX"),
         }
     }
 }
@@ -66,4 +71,3 @@ impl Default for JobType {
         Self::CreateSandbox
     }
 }
-

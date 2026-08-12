@@ -20,9 +20,6 @@ pub struct DisplayInfoResponse {
 
 impl DisplayInfoResponse {
     pub fn new(displays: Vec<serde_json::Value>) -> DisplayInfoResponse {
-        DisplayInfoResponse {
-            displays,
-        }
+        DisplayInfoResponse { displays }
     }
 }
-

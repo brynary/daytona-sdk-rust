@@ -23,10 +23,6 @@ pub struct CreateRunnerResponse {
 
 impl CreateRunnerResponse {
     pub fn new(id: String, api_key: String) -> CreateRunnerResponse {
-        CreateRunnerResponse {
-            id,
-            api_key,
-        }
+        CreateRunnerResponse { id, api_key }
     }
 }
-

@@ -55,11 +55,17 @@ pub struct DaytonaConfiguration {
     /// Billing API URL
     #[serde(rename = "billingApiUrl", skip_serializing_if = "Option::is_none")]
     pub billing_api_url: Option<String>,
+    /// Analytics API URL
+    #[serde(rename = "analyticsApiUrl", skip_serializing_if = "Option::is_none")]
+    pub analytics_api_url: Option<String>,
     /// SSH Gateway command
     #[serde(rename = "sshGatewayCommand", skip_serializing_if = "Option::is_none")]
     pub ssh_gateway_command: Option<String>,
     /// Base64 encoded SSH Gateway public key
-    #[serde(rename = "sshGatewayPublicKey", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayPublicKey",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_public_key: Option<String>,
     /// Rate limit configuration
     #[serde(rename = "rateLimit", skip_serializing_if = "Option::is_none")]
@@ -67,7 +73,19 @@ pub struct DaytonaConfiguration {
 }
 
 impl DaytonaConfiguration {
-    pub fn new(version: String, oidc: models::OidcConfig, linked_accounts_enabled: bool, announcements: std::collections::HashMap<String, models::Announcement>, proxy_template_url: String, proxy_toolbox_url: String, default_snapshot: String, dashboard_url: String, max_auto_archive_interval: f64, maintanance_mode: bool, environment: String) -> DaytonaConfiguration {
+    pub fn new(
+        version: String,
+        oidc: models::OidcConfig,
+        linked_accounts_enabled: bool,
+        announcements: std::collections::HashMap<String, models::Announcement>,
+        proxy_template_url: String,
+        proxy_toolbox_url: String,
+        default_snapshot: String,
+        dashboard_url: String,
+        max_auto_archive_interval: f64,
+        maintanance_mode: bool,
+        environment: String,
+    ) -> DaytonaConfiguration {
         DaytonaConfiguration {
             version,
             posthog: None,
@@ -83,10 +101,10 @@ impl DaytonaConfiguration {
             maintanance_mode,
             environment,
             billing_api_url: None,
+            analytics_api_url: None,
             ssh_gateway_command: None,
             ssh_gateway_public_key: None,
             rate_limit: None,
         }
     }
 }
-

@@ -80,7 +80,10 @@ pub struct Sandbox {
     #[serde(rename = "autoStopInterval", skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<f64>,
     /// Auto-archive interval in minutes
-    #[serde(rename = "autoArchiveInterval", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "autoArchiveInterval",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_archive_interval: Option<f64>,
     /// Auto-delete interval in minutes (negative value means disabled, 0 means delete immediately upon stopping)
     #[serde(rename = "autoDeleteInterval", skip_serializing_if = "Option::is_none")]
@@ -97,6 +100,9 @@ pub struct Sandbox {
     /// The last update timestamp of the sandbox
     #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// The last activity timestamp of the sandbox
+    #[serde(rename = "lastActivityAt", skip_serializing_if = "Option::is_none")]
+    pub last_activity_at: Option<String>,
     /// The class of the sandbox
     #[serde(rename = "class", skip_serializing_if = "Option::is_none")]
     pub class: Option<Class>,
@@ -106,10 +112,28 @@ pub struct Sandbox {
     /// The runner ID of the sandbox
     #[serde(rename = "runnerId", skip_serializing_if = "Option::is_none")]
     pub runner_id: Option<String>,
+    /// The toolbox proxy URL for the sandbox
+    #[serde(rename = "toolboxProxyUrl")]
+    pub toolbox_proxy_url: String,
 }
 
 impl Sandbox {
-    pub fn new(id: String, organization_id: String, name: String, user: String, env: std::collections::HashMap<String, String>, labels: std::collections::HashMap<String, String>, public: bool, network_block_all: bool, target: String, cpu: f64, gpu: f64, memory: f64, disk: f64) -> Sandbox {
+    pub fn new(
+        id: String,
+        organization_id: String,
+        name: String,
+        user: String,
+        env: std::collections::HashMap<String, String>,
+        labels: std::collections::HashMap<String, String>,
+        public: bool,
+        network_block_all: bool,
+        target: String,
+        cpu: f64,
+        gpu: f64,
+        memory: f64,
+        disk: f64,
+        toolbox_proxy_url: String,
+    ) -> Sandbox {
         Sandbox {
             id,
             organization_id,
@@ -139,9 +163,11 @@ impl Sandbox {
             build_info: None,
             created_at: None,
             updated_at: None,
+            last_activity_at: None,
             class: None,
             daemon_version: None,
             runner_id: None,
+            toolbox_proxy_url,
         }
     }
 }
@@ -181,4 +207,3 @@ impl Default for Class {
         Self::Small
     }
 }
-

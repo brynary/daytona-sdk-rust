@@ -37,7 +37,15 @@ pub struct OrganizationRole {
 }
 
 impl OrganizationRole {
-    pub fn new(id: String, name: String, description: String, permissions: Vec<Permissions>, is_global: bool, created_at: String, updated_at: String) -> OrganizationRole {
+    pub fn new(
+        id: String,
+        name: String,
+        description: String,
+        permissions: Vec<Permissions>,
+        is_global: bool,
+        created_at: String,
+        updated_at: String,
+    ) -> OrganizationRole {
         OrganizationRole {
             id,
             name,

@@ -59,7 +59,10 @@ pub struct CreateSandbox {
     #[serde(rename = "autoStopInterval", skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<i32>,
     /// Auto-archive interval in minutes (0 means the maximum interval will be used)
-    #[serde(rename = "autoArchiveInterval", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "autoArchiveInterval",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_archive_interval: Option<i32>,
     /// Auto-delete interval in minutes (negative value means disabled, 0 means delete immediately upon stopping)
     #[serde(rename = "autoDeleteInterval", skip_serializing_if = "Option::is_none")]
@@ -113,4 +116,3 @@ impl Default for Class {
         Self::Small
     }
 }
-

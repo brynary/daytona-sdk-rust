@@ -19,9 +19,6 @@ pub struct CreateVolume {
 
 impl CreateVolume {
     pub fn new(name: String) -> CreateVolume {
-        CreateVolume {
-            name,
-        }
+        CreateVolume { name }
     }
 }
-

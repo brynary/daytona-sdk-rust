@@ -20,9 +20,6 @@ pub struct PollJobsResponse {
 
 impl PollJobsResponse {
     pub fn new(jobs: Vec<models::Job>) -> PollJobsResponse {
-        PollJobsResponse {
-            jobs,
-        }
+        PollJobsResponse { jobs }
     }
 }
-

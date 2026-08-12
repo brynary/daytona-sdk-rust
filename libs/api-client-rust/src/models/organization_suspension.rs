@@ -20,7 +20,10 @@ pub struct OrganizationSuspension {
     #[serde(rename = "until")]
     pub until: String,
     /// Suspension cleanup grace period hours
-    #[serde(rename = "suspensionCleanupGracePeriodHours", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "suspensionCleanupGracePeriodHours",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub suspension_cleanup_grace_period_hours: Option<f64>,
 }
 
@@ -33,4 +36,3 @@ impl OrganizationSuspension {
         }
     }
 }
-

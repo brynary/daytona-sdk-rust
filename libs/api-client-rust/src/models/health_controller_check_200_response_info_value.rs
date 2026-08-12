@@ -19,9 +19,6 @@ pub struct HealthControllerCheck200ResponseInfoValue {
 
 impl HealthControllerCheck200ResponseInfoValue {
     pub fn new(status: String) -> HealthControllerCheck200ResponseInfoValue {
-        HealthControllerCheck200ResponseInfoValue {
-            status,
-        }
+        HealthControllerCheck200ResponseInfoValue { status }
     }
 }
-

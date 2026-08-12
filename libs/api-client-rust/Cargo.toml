@@ -3,8 +3,7 @@ name = "daytona-api-client"
 version = "0.1.0"
 authors = ["support@daytona.com"]
 description = "Daytona AI platform API Docs"
-# Override this license by providing a License Object in the OpenAPI.
-license = "Unlicense"
+license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
@@ -13,11 +12,12 @@ serde_with = { version = "^3.8", default-features = false, features = ["base64",
 serde_json = "^1.0"
 serde_repr = "^0.1"
 url = "^2.5"
-reqwest = { version = "^0.13", features = ["json", "multipart"] }
-reqwest-middleware = { version = "^0.5", features = ["json", "multipart", "form", "query"] }
+tokio = { version = "^1.46.0", features = ["fs"] }
+tokio-util = { version = "^0.7", features = ["codec"] }
+reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "stream", "query", "form"] }
+reqwest-middleware = { version = "^0.5", features = ["json", "multipart", "query", "form"] }
 
-[lints.rust]
-warnings = "allow"
-
-[lints.clippy]
-all = "allow"
+[features]
+default = ["native-tls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]

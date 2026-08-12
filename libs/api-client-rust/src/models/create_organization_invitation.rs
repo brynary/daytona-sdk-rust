@@ -28,7 +28,11 @@ pub struct CreateOrganizationInvitation {
 }
 
 impl CreateOrganizationInvitation {
-    pub fn new(email: String, role: Role, assigned_role_ids: Vec<String>) -> CreateOrganizationInvitation {
+    pub fn new(
+        email: String,
+        role: Role,
+        assigned_role_ids: Vec<String>,
+    ) -> CreateOrganizationInvitation {
         CreateOrganizationInvitation {
             email,
             role,
@@ -51,4 +55,3 @@ impl Default for Role {
         Self::Owner
     }
 }
-

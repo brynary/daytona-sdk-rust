@@ -21,7 +21,6 @@ pub enum RegionType {
     Dedicated,
     #[serde(rename = "custom")]
     Custom,
-
 }
 
 impl std::fmt::Display for RegionType {
@@ -39,4 +38,3 @@ impl Default for RegionType {
         Self::Shared
     }
 }
-

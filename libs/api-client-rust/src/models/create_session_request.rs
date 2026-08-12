@@ -20,9 +20,6 @@ pub struct CreateSessionRequest {
 
 impl CreateSessionRequest {
     pub fn new(session_id: String) -> CreateSessionRequest {
-        CreateSessionRequest {
-            session_id,
-        }
+        CreateSessionRequest { session_id }
     }
 }
-

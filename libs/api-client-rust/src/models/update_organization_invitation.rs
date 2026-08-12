@@ -47,4 +47,3 @@ impl Default for Role {
         Self::Owner
     }
 }
-

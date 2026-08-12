@@ -40,7 +40,16 @@ pub struct DockerRegistry {
 }
 
 impl DockerRegistry {
-    pub fn new(id: String, name: String, url: String, username: String, project: String, registry_type: RegistryType, created_at: String, updated_at: String) -> DockerRegistry {
+    pub fn new(
+        id: String,
+        name: String,
+        url: String,
+        username: String,
+        project: String,
+        registry_type: RegistryType,
+        created_at: String,
+        updated_at: String,
+    ) -> DockerRegistry {
         DockerRegistry {
             id,
             name,
@@ -71,4 +80,3 @@ impl Default for RegistryType {
         Self::Internal
     }
 }
-

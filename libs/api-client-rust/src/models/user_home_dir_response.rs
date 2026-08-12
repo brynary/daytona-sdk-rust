@@ -19,9 +19,6 @@ pub struct UserHomeDirResponse {
 
 impl UserHomeDirResponse {
     pub fn new() -> UserHomeDirResponse {
-        UserHomeDirResponse {
-            dir: None,
-        }
+        UserHomeDirResponse { dir: None }
     }
 }
-

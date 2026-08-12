@@ -43,7 +43,14 @@ pub struct LogEntry {
 }
 
 impl LogEntry {
-    pub fn new(timestamp: String, body: String, severity_text: String, service_name: String, resource_attributes: std::collections::HashMap<String, String>, log_attributes: std::collections::HashMap<String, String>) -> LogEntry {
+    pub fn new(
+        timestamp: String,
+        body: String,
+        severity_text: String,
+        service_name: String,
+        resource_attributes: std::collections::HashMap<String, String>,
+        log_attributes: std::collections::HashMap<String, String>,
+    ) -> LogEntry {
         LogEntry {
             timestamp,
             body,
@@ -57,4 +64,3 @@ impl LogEntry {
         }
     }
 }
-

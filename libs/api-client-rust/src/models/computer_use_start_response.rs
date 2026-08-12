@@ -23,10 +23,6 @@ pub struct ComputerUseStartResponse {
 
 impl ComputerUseStartResponse {
     pub fn new(message: String, status: serde_json::Value) -> ComputerUseStartResponse {
-        ComputerUseStartResponse {
-            message,
-            status,
-        }
+        ComputerUseStartResponse { message, status }
     }
 }
-

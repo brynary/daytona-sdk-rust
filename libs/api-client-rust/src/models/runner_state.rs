@@ -25,7 +25,6 @@ pub enum RunnerState {
     Decommissioned,
     #[serde(rename = "unresponsive")]
     Unresponsive,
-
 }
 
 impl std::fmt::Display for RunnerState {
@@ -45,4 +44,3 @@ impl Default for RunnerState {
         Self::Initializing
     }
 }
-
