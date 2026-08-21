@@ -37,9 +37,18 @@ pub struct CreateSandbox {
     /// Comma-separated list of allowed CIDR network addresses for the sandbox
     #[serde(rename = "networkAllowList", skip_serializing_if = "Option::is_none")]
     pub network_allow_list: Option<String>,
-    /// The sandbox class type
-    #[serde(rename = "class", skip_serializing_if = "Option::is_none")]
-    pub class: Option<Class>,
+    /// Comma-separated list of allowed domains for the sandbox
+    #[serde(rename = "domainAllowList", skip_serializing_if = "Option::is_none")]
+    pub domain_allow_list: Option<String>,
+    /// Outbound proxy URL to route the sandbox HTTP(S) traffic through (http or https; credentials may be included in the URL). On its own this is convenience routing, not a security boundary: it is applied by injecting the standard HTTP(S)_PROXY environment variables at creation, so a process that clears those variables egresses directly. Combine with domainAllowList to have web-port (80/443) egress transparently redirected through the proxy chain at the network layer, which cannot be bypassed from inside the sandbox.
+    #[serde(rename = "outboundProxyUrl", skip_serializing_if = "Option::is_none")]
+    pub outbound_proxy_url: Option<String>,
+    /// OTel collector endpoint override for this sandbox. When set, sandbox OTel data is sent to this endpoint instead of the default collector (the Daytona-hosted collector or the region-configured endpoint) and will not be available in the Daytona analytics API or dashboard.
+    #[serde(
+        rename = "otelEndpointOverride",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub otel_endpoint_override: Option<String>,
     /// The target (region) where the sandbox will be created
     #[serde(rename = "target", skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
@@ -49,6 +58,12 @@ pub struct CreateSandbox {
     /// GPU units allocated to the sandbox
     #[serde(rename = "gpu", skip_serializing_if = "Option::is_none")]
     pub gpu: Option<i32>,
+    /// Preferred GPU type for the sandbox. Accepts a single value or an ordered preference list — the scheduler tries each in order and pins the sandbox to the first that has capacity.
+    #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
+    pub gpu_type: Option<Vec<models::GpuType>>,
+    /// GPU-only. When true, the sandbox may be instantly terminated without notice to free GPU capacity for an on-demand (non-spot) GPU sandbox. Ignored / rejected when the sandbox requests no GPUs.
+    #[serde(rename = "spot", skip_serializing_if = "Option::is_none")]
+    pub spot: Option<bool>,
     /// Memory allocated to the sandbox in GB
     #[serde(rename = "memory", skip_serializing_if = "Option::is_none")]
     pub memory: Option<i32>,
@@ -58,18 +73,33 @@ pub struct CreateSandbox {
     /// Auto-stop interval in minutes (0 means disabled)
     #[serde(rename = "autoStopInterval", skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<i32>,
+    /// Auto-pause interval in minutes (0 means disabled). Only supported for sandbox classes that support pausing. Not allowed for ephemeral sandboxes. At most one of autoStopInterval and autoPauseInterval may be non-zero. For non-ephemeral sandbox classes that support pausing, defaults to 60 minutes (with auto-stop disabled) when neither interval is provided.
+    #[serde(rename = "autoPauseInterval", skip_serializing_if = "Option::is_none")]
+    pub auto_pause_interval: Option<i32>,
     /// Auto-archive interval in minutes (0 means the maximum interval will be used)
-    #[serde(rename = "autoArchiveInterval", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "autoArchiveInterval",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_archive_interval: Option<i32>,
     /// Auto-delete interval in minutes (negative value means disabled, 0 means delete immediately upon stopping)
     #[serde(rename = "autoDeleteInterval", skip_serializing_if = "Option::is_none")]
     pub auto_delete_interval: Option<i32>,
+    /// Maximum time to live in minutes, counted as wall-clock time since creation regardless of sandbox state (0 means disabled). When it elapses the sandbox is destroyed, even if it is stopped, paused, or archived. Subject to the maximum sandbox lifespan configured for the organization region and sandbox class, in which case it also defaults to that maximum and cannot be disabled.
+    #[serde(rename = "ttlMinutes", skip_serializing_if = "Option::is_none")]
+    pub ttl_minutes: Option<i32>,
     /// Array of volumes to attach to the sandbox
     #[serde(rename = "volumes", skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<models::SandboxVolume>>,
     /// Build information for the sandbox
     #[serde(rename = "buildInfo", skip_serializing_if = "Option::is_none")]
     pub build_info: Option<Box<models::CreateBuildInfo>>,
+    /// ID or name of an existing sandbox to link the new sandbox to. The new sandbox will be scheduled on the same runner as the linked sandbox so a local network can be established between them. Linked sandboxes must be ephemeral (autoDeleteInterval=0) and cannot themselves be linked to another sandbox. GPU sandboxes cannot participate in links in either direction: a GPU sandbox cannot specify linkedSandbox, and cannot be the link target of another sandbox.
+    #[serde(rename = "linkedSandbox", skip_serializing_if = "Option::is_none")]
+    pub linked_sandbox: Option<String>,
+    /// Secrets to mount in this sandbox. Each entry maps an env var name to a vault secret name.
+    #[serde(rename = "secrets", skip_serializing_if = "Option::is_none")]
+    pub secrets: Option<Vec<std::collections::HashMap<String, String>>>,
 }
 
 impl CreateSandbox {
@@ -83,34 +113,25 @@ impl CreateSandbox {
             public: None,
             network_block_all: None,
             network_allow_list: None,
-            class: None,
+            domain_allow_list: None,
+            outbound_proxy_url: None,
+            otel_endpoint_override: None,
             target: None,
             cpu: None,
             gpu: None,
+            gpu_type: None,
+            spot: None,
             memory: None,
             disk: None,
             auto_stop_interval: None,
+            auto_pause_interval: None,
             auto_archive_interval: None,
             auto_delete_interval: None,
+            ttl_minutes: None,
             volumes: None,
             build_info: None,
+            linked_sandbox: None,
+            secrets: None,
         }
     }
 }
-/// The sandbox class type
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Class {
-    #[serde(rename = "small")]
-    Small,
-    #[serde(rename = "medium")]
-    Medium,
-    #[serde(rename = "large")]
-    Large,
-}
-
-impl Default for Class {
-    fn default() -> Class {
-        Self::Small
-    }
-}
-

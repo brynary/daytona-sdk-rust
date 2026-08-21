@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SandboxVolume {
-    /// The ID of the volume
+    /// The ID or name of the volume. Resolved to the volume ID on sandbox create.
     #[serde(rename = "volumeId")]
     pub volume_id: String,
     /// The mount path for the volume
@@ -33,4 +33,3 @@ impl SandboxVolume {
         }
     }
 }
-

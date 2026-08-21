@@ -16,12 +16,21 @@ pub struct DaytonaConfiguration {
     /// Daytona version
     #[serde(rename = "version")]
     pub version: String,
+    /// Commit sha of the source the app was built from
+    #[serde(rename = "buildSha", skip_serializing_if = "Option::is_none")]
+    pub build_sha: Option<String>,
     /// PostHog configuration
     #[serde(rename = "posthog", skip_serializing_if = "Option::is_none")]
     pub posthog: Option<Box<models::PosthogConfig>>,
     /// OIDC configuration
     #[serde(rename = "oidc")]
     pub oidc: Box<models::OidcConfig>,
+    /// OIDC configuration for org-SSO logins (Daytona Auth issuer). Present only when the secondary (org-SSO) issuer is configured; the dashboard uses it as its authority when entered via an organization SSO link.
+    #[serde(rename = "ssoOidc", skip_serializing_if = "Option::is_none")]
+    pub sso_oidc: Option<Box<models::SsoOidcConfig>>,
+    /// Feature flags forced on for this deployment regardless of PostHog targeting. Lets environments without PostHog (previews, local dev) enable flag-gated dashboard features.
+    #[serde(rename = "forcedFeatureFlags", skip_serializing_if = "Option::is_none")]
+    pub forced_feature_flags: Option<Vec<String>>,
     /// Whether linked accounts are enabled
     #[serde(rename = "linkedAccountsEnabled")]
     pub linked_accounts_enabled: bool,
@@ -55,11 +64,23 @@ pub struct DaytonaConfiguration {
     /// Billing API URL
     #[serde(rename = "billingApiUrl", skip_serializing_if = "Option::is_none")]
     pub billing_api_url: Option<String>,
+    /// Analytics API URL
+    #[serde(rename = "analyticsApiUrl", skip_serializing_if = "Option::is_none")]
+    pub analytics_api_url: Option<String>,
+    /// Stripe publishable key for client-side Stripe.js
+    #[serde(
+        rename = "stripePublishableKey",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stripe_publishable_key: Option<String>,
     /// SSH Gateway command
     #[serde(rename = "sshGatewayCommand", skip_serializing_if = "Option::is_none")]
     pub ssh_gateway_command: Option<String>,
     /// Base64 encoded SSH Gateway public key
-    #[serde(rename = "sshGatewayPublicKey", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayPublicKey",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_public_key: Option<String>,
     /// Rate limit configuration
     #[serde(rename = "rateLimit", skip_serializing_if = "Option::is_none")]
@@ -67,11 +88,26 @@ pub struct DaytonaConfiguration {
 }
 
 impl DaytonaConfiguration {
-    pub fn new(version: String, oidc: models::OidcConfig, linked_accounts_enabled: bool, announcements: std::collections::HashMap<String, models::Announcement>, proxy_template_url: String, proxy_toolbox_url: String, default_snapshot: String, dashboard_url: String, max_auto_archive_interval: f64, maintanance_mode: bool, environment: String) -> DaytonaConfiguration {
+    pub fn new(
+        version: String,
+        oidc: models::OidcConfig,
+        linked_accounts_enabled: bool,
+        announcements: std::collections::HashMap<String, models::Announcement>,
+        proxy_template_url: String,
+        proxy_toolbox_url: String,
+        default_snapshot: String,
+        dashboard_url: String,
+        max_auto_archive_interval: f64,
+        maintanance_mode: bool,
+        environment: String,
+    ) -> DaytonaConfiguration {
         DaytonaConfiguration {
             version,
+            build_sha: None,
             posthog: None,
             oidc: Box::new(oidc),
+            sso_oidc: None,
+            forced_feature_flags: None,
             linked_accounts_enabled,
             announcements,
             pylon_app_id: None,
@@ -83,10 +119,11 @@ impl DaytonaConfiguration {
             maintanance_mode,
             environment,
             billing_api_url: None,
+            analytics_api_url: None,
+            stripe_publishable_key: None,
             ssh_gateway_command: None,
             ssh_gateway_public_key: None,
             rate_limit: None,
         }
     }
 }
-

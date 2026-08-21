@@ -37,7 +37,14 @@ pub struct TraceSummary {
 }
 
 impl TraceSummary {
-    pub fn new(trace_id: String, root_span_name: String, start_time: String, end_time: String, duration_ms: f64, span_count: f64) -> TraceSummary {
+    pub fn new(
+        trace_id: String,
+        root_span_name: String,
+        start_time: String,
+        end_time: String,
+        duration_ms: f64,
+        span_count: f64,
+    ) -> TraceSummary {
         TraceSummary {
             trace_id,
             root_span_name,
@@ -49,4 +56,3 @@ impl TraceSummary {
         }
     }
 }
-

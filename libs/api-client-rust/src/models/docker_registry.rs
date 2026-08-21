@@ -40,7 +40,16 @@ pub struct DockerRegistry {
 }
 
 impl DockerRegistry {
-    pub fn new(id: String, name: String, url: String, username: String, project: String, registry_type: RegistryType, created_at: String, updated_at: String) -> DockerRegistry {
+    pub fn new(
+        id: String,
+        name: String,
+        url: String,
+        username: String,
+        project: String,
+        registry_type: RegistryType,
+        created_at: String,
+        updated_at: String,
+    ) -> DockerRegistry {
         DockerRegistry {
             id,
             name,
@@ -64,6 +73,8 @@ pub enum RegistryType {
     Transient,
     #[serde(rename = "backup")]
     Backup,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for RegistryType {
@@ -71,4 +82,3 @@ impl Default for RegistryType {
         Self::Internal
     }
 }
-

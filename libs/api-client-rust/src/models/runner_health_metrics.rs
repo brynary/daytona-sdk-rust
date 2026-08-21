@@ -49,10 +49,29 @@ pub struct RunnerHealthMetrics {
     /// Total disk space in GiB on the runner
     #[serde(rename = "diskGiB")]
     pub disk_gi_b: f64,
+    /// Total number of GPUs on the runner
+    #[serde(rename = "gpu", skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<f64>,
+    /// GPU model name
+    #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
+    pub gpu_type: Option<String>,
 }
 
 impl RunnerHealthMetrics {
-    pub fn new(current_cpu_load_average: f64, current_cpu_usage_percentage: f64, current_memory_usage_percentage: f64, current_disk_usage_percentage: f64, current_allocated_cpu: f64, current_allocated_memory_gi_b: f64, current_allocated_disk_gi_b: f64, current_snapshot_count: f64, current_started_sandboxes: f64, cpu: f64, memory_gi_b: f64, disk_gi_b: f64) -> RunnerHealthMetrics {
+    pub fn new(
+        current_cpu_load_average: f64,
+        current_cpu_usage_percentage: f64,
+        current_memory_usage_percentage: f64,
+        current_disk_usage_percentage: f64,
+        current_allocated_cpu: f64,
+        current_allocated_memory_gi_b: f64,
+        current_allocated_disk_gi_b: f64,
+        current_snapshot_count: f64,
+        current_started_sandboxes: f64,
+        cpu: f64,
+        memory_gi_b: f64,
+        disk_gi_b: f64,
+    ) -> RunnerHealthMetrics {
         RunnerHealthMetrics {
             current_cpu_load_average,
             current_cpu_usage_percentage,
@@ -66,7 +85,8 @@ impl RunnerHealthMetrics {
             cpu,
             memory_gi_b,
             disk_gi_b,
+            gpu: None,
+            gpu_type: None,
         }
     }
 }
-

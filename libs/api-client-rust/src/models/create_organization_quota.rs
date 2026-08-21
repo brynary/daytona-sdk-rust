@@ -19,9 +19,14 @@ pub struct CreateOrganizationQuota {
     pub total_memory_quota: Option<f64>,
     #[serde(rename = "totalDiskQuota", skip_serializing_if = "Option::is_none")]
     pub total_disk_quota: Option<f64>,
+    #[serde(rename = "totalGpuQuota", skip_serializing_if = "Option::is_none")]
+    pub total_gpu_quota: Option<f64>,
     #[serde(rename = "maxCpuPerSandbox", skip_serializing_if = "Option::is_none")]
     pub max_cpu_per_sandbox: Option<f64>,
-    #[serde(rename = "maxMemoryPerSandbox", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub max_memory_per_sandbox: Option<f64>,
     #[serde(rename = "maxDiskPerSandbox", skip_serializing_if = "Option::is_none")]
     pub max_disk_per_sandbox: Option<f64>,
@@ -31,6 +36,12 @@ pub struct CreateOrganizationQuota {
     pub max_snapshot_size: Option<f64>,
     #[serde(rename = "volumeQuota", skip_serializing_if = "Option::is_none")]
     pub volume_quota: Option<f64>,
+    /// Maximum number of snapshots an organization can process (building or pulling) concurrently. Excess are queued. <= 0 means unlimited.
+    #[serde(
+        rename = "maxConcurrentSnapshotProcessing",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_concurrent_snapshot_processing: Option<f64>,
 }
 
 impl CreateOrganizationQuota {
@@ -39,13 +50,14 @@ impl CreateOrganizationQuota {
             total_cpu_quota: None,
             total_memory_quota: None,
             total_disk_quota: None,
+            total_gpu_quota: None,
             max_cpu_per_sandbox: None,
             max_memory_per_sandbox: None,
             max_disk_per_sandbox: None,
             snapshot_quota: None,
             max_snapshot_size: None,
             volume_quota: None,
+            max_concurrent_snapshot_processing: None,
         }
     }
 }
-

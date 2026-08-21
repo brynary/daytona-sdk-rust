@@ -21,7 +21,8 @@ pub enum RegionType {
     Dedicated,
     #[serde(rename = "custom")]
     Custom,
-
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for RegionType {
@@ -30,6 +31,7 @@ impl std::fmt::Display for RegionType {
             Self::Shared => write!(f, "shared"),
             Self::Dedicated => write!(f, "dedicated"),
             Self::Custom => write!(f, "custom"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -39,4 +41,3 @@ impl Default for RegionType {
         Self::Shared
     }
 }
-

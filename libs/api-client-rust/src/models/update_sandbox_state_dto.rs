@@ -70,6 +70,18 @@ pub enum State {
     Archiving,
     #[serde(rename = "resizing")]
     Resizing,
+    #[serde(rename = "snapshotting")]
+    Snapshotting,
+    #[serde(rename = "forking")]
+    Forking,
+    #[serde(rename = "pausing")]
+    Pausing,
+    #[serde(rename = "paused")]
+    Paused,
+    #[serde(rename = "resuming")]
+    Resuming,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for State {
@@ -77,4 +89,3 @@ impl Default for State {
         Self::Creating
     }
 }
-

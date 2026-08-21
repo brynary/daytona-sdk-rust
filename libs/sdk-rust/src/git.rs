@@ -25,6 +25,8 @@ impl GitService {
             path: target_path.to_string(),
             branch: options.branch,
             commit_id: options.commit_id,
+            depth: options.depth,
+            insecure_skip_tls: options.insecure_skip_tls,
             username: options.username,
             password: options.password,
         };
@@ -81,10 +83,13 @@ impl GitService {
 
     /// Push changes to remote.
     pub async fn push(&self, repo_path: &str, options: GitPushOptions) -> Result<(), DaytonaError> {
-        let req = daytona_toolbox_client::models::GitRepoRequest {
+        let req = daytona_toolbox_client::models::GitPushRequest {
             path: repo_path.to_string(),
             username: options.username,
             password: options.password,
+            branch: options.branch,
+            remote: options.remote,
+            set_upstream: options.set_upstream,
         };
         git_api::push_changes(&self.config, req)
             .await
@@ -94,10 +99,12 @@ impl GitService {
 
     /// Pull changes from remote.
     pub async fn pull(&self, repo_path: &str, options: GitPullOptions) -> Result<(), DaytonaError> {
-        let req = daytona_toolbox_client::models::GitRepoRequest {
+        let req = daytona_toolbox_client::models::GitPullRequest {
             path: repo_path.to_string(),
             username: options.username,
             password: options.password,
+            branch: options.branch,
+            remote: options.remote,
         };
         git_api::pull_changes(&self.config, req)
             .await
@@ -147,7 +154,7 @@ impl GitService {
         branch: &str,
         _options: GitDeleteBranchOptions,
     ) -> Result<(), DaytonaError> {
-        let req = daytona_toolbox_client::models::GitPeriodGitDeleteBranchRequest {
+        let req = daytona_toolbox_client::models::GitDeleteBranchRequest {
             path: repo_path.to_string(),
             name: branch.to_string(),
         };
@@ -161,7 +168,7 @@ impl GitService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn git_service(mock_server: &MockServer) -> GitService {
@@ -213,6 +220,38 @@ mod tests {
             "/home/daytona/repo",
             GitCloneOptions {
                 branch: Some("develop".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_git_clone_with_depth_and_tls_option() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/git/clone"))
+            .and(body_json(serde_json::json!({
+                "url": "https://github.com/example/repo.git",
+                "path": "/home/daytona/repo",
+                "branch": "main",
+                "depth": 1,
+                "insecure_skip_tls": false
+            })))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        let svc = git_service(&mock_server).await;
+        svc.clone(
+            "https://github.com/example/repo.git",
+            "/home/daytona/repo",
+            GitCloneOptions {
+                branch: Some("main".to_string()),
+                depth: Some(1),
+                insecure_skip_tls: Some(false),
                 ..Default::default()
             },
         )

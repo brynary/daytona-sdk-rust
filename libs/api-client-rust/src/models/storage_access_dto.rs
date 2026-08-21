@@ -31,10 +31,21 @@ pub struct StorageAccessDto {
     /// S3 bucket name
     #[serde(rename = "bucket")]
     pub bucket: String,
+    /// Region for the storage backend (e.g. \"us-east-2\")
+    #[serde(rename = "region")]
+    pub region: String,
 }
 
 impl StorageAccessDto {
-    pub fn new(access_key: String, secret: String, session_token: String, storage_url: String, organization_id: String, bucket: String) -> StorageAccessDto {
+    pub fn new(
+        access_key: String,
+        secret: String,
+        session_token: String,
+        storage_url: String,
+        organization_id: String,
+        bucket: String,
+        region: String,
+    ) -> StorageAccessDto {
         StorageAccessDto {
             access_key,
             secret,
@@ -42,7 +53,7 @@ impl StorageAccessDto {
             storage_url,
             organization_id,
             bucket,
+            region,
         }
     }
 }
-

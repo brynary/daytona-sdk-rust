@@ -33,6 +33,9 @@ pub struct SnapshotDto {
     pub cpu: f64,
     #[serde(rename = "gpu")]
     pub gpu: f64,
+    /// The GPU type assigned to the snapshot
+    #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
+    pub gpu_type: Option<models::GpuType>,
     #[serde(rename = "mem")]
     pub mem: f64,
     #[serde(rename = "disk")]
@@ -57,10 +60,32 @@ pub struct SnapshotDto {
     /// The snapshot reference
     #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
     pub r#ref: Option<String>,
+    /// The ID of the sandbox the snapshot was created from
+    #[serde(rename = "sourceSandboxId", deserialize_with = "Option::deserialize")]
+    pub source_sandbox_id: Option<String>,
+    /// The sandbox class of the snapshot
+    #[serde(rename = "sandboxClass", skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<SandboxClass>,
 }
 
 impl SnapshotDto {
-    pub fn new(id: String, general: bool, name: String, state: models::SnapshotState, size: Option<f64>, entrypoint: Option<Vec<String>>, cpu: f64, gpu: f64, mem: f64, disk: f64, error_reason: Option<String>, created_at: String, updated_at: String, last_used_at: Option<String>) -> SnapshotDto {
+    pub fn new(
+        id: String,
+        general: bool,
+        name: String,
+        state: models::SnapshotState,
+        size: Option<f64>,
+        entrypoint: Option<Vec<String>>,
+        cpu: f64,
+        gpu: f64,
+        mem: f64,
+        disk: f64,
+        error_reason: Option<String>,
+        created_at: String,
+        updated_at: String,
+        last_used_at: Option<String>,
+        source_sandbox_id: Option<String>,
+    ) -> SnapshotDto {
         SnapshotDto {
             id,
             organization_id: None,
@@ -72,6 +97,7 @@ impl SnapshotDto {
             entrypoint,
             cpu,
             gpu,
+            gpu_type: None,
             mem,
             disk,
             error_reason,
@@ -82,7 +108,28 @@ impl SnapshotDto {
             region_ids: None,
             initial_runner_id: None,
             r#ref: None,
+            source_sandbox_id,
+            sandbox_class: None,
         }
     }
 }
+/// The sandbox class of the snapshot
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum SandboxClass {
+    #[serde(rename = "linux-vm")]
+    LINUX_VM,
+    #[serde(rename = "container")]
+    CONTAINER,
+    #[serde(rename = "android")]
+    ANDROID,
+    #[serde(rename = "windows")]
+    WINDOWS,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
+}
 
+impl Default for SandboxClass {
+    fn default() -> SandboxClass {
+        Self::LINUX_VM
+    }
+}

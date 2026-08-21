@@ -25,7 +25,10 @@ pub enum SandboxDesiredState {
     Resized,
     #[serde(rename = "archived")]
     Archived,
-
+    #[serde(rename = "paused")]
+    Paused,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for SandboxDesiredState {
@@ -36,6 +39,8 @@ impl std::fmt::Display for SandboxDesiredState {
             Self::Stopped => write!(f, "stopped"),
             Self::Resized => write!(f, "resized"),
             Self::Archived => write!(f, "archived"),
+            Self::Paused => write!(f, "paused"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -45,4 +50,3 @@ impl Default for SandboxDesiredState {
         Self::Destroyed
     }
 }
-

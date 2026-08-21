@@ -34,7 +34,14 @@ pub struct WebhookInitializationStatus {
 }
 
 impl WebhookInitializationStatus {
-    pub fn new(organization_id: String, svix_application_id: Option<String>, last_error: Option<String>, retry_count: f64, created_at: String, updated_at: String) -> WebhookInitializationStatus {
+    pub fn new(
+        organization_id: String,
+        svix_application_id: Option<String>,
+        last_error: Option<String>,
+        retry_count: f64,
+        created_at: String,
+        updated_at: String,
+    ) -> WebhookInitializationStatus {
         WebhookInitializationStatus {
             organization_id,
             svix_application_id,
@@ -45,4 +52,3 @@ impl WebhookInitializationStatus {
         }
     }
 }
-

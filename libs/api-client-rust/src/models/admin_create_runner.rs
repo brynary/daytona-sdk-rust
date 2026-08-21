@@ -17,6 +17,9 @@ pub struct AdminCreateRunner {
     pub region_id: String,
     #[serde(rename = "name")]
     pub name: String,
+    /// Tags to associate with the runner
+    #[serde(rename = "tags", skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
     #[serde(rename = "apiKey")]
     pub api_key: String,
     /// The api version of the runner to create
@@ -43,10 +46,16 @@ pub struct AdminCreateRunner {
 }
 
 impl AdminCreateRunner {
-    pub fn new(region_id: String, name: String, api_key: String, api_version: String) -> AdminCreateRunner {
+    pub fn new(
+        region_id: String,
+        name: String,
+        api_key: String,
+        api_version: String,
+    ) -> AdminCreateRunner {
         AdminCreateRunner {
             region_id,
             name,
+            tags: None,
             api_key,
             api_version,
             domain: None,
@@ -58,4 +67,3 @@ impl AdminCreateRunner {
         }
     }
 }
-

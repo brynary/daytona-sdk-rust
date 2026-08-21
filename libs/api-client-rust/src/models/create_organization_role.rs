@@ -25,7 +25,11 @@ pub struct CreateOrganizationRole {
 }
 
 impl CreateOrganizationRole {
-    pub fn new(name: String, description: String, permissions: Vec<Permissions>) -> CreateOrganizationRole {
+    pub fn new(
+        name: String,
+        description: String,
+        permissions: Vec<Permissions>,
+    ) -> CreateOrganizationRole {
         CreateOrganizationRole {
             name,
             description,
@@ -37,40 +41,53 @@ impl CreateOrganizationRole {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Permissions {
     #[serde(rename = "write:registries")]
-    WriteColonRegistries,
+    WRITE_REGISTRIES,
     #[serde(rename = "delete:registries")]
-    DeleteColonRegistries,
+    DELETE_REGISTRIES,
     #[serde(rename = "write:snapshots")]
-    WriteColonSnapshots,
+    WRITE_SNAPSHOTS,
     #[serde(rename = "delete:snapshots")]
-    DeleteColonSnapshots,
+    DELETE_SNAPSHOTS,
     #[serde(rename = "write:sandboxes")]
-    WriteColonSandboxes,
+    WRITE_SANDBOXES,
     #[serde(rename = "delete:sandboxes")]
-    DeleteColonSandboxes,
+    DELETE_SANDBOXES,
     #[serde(rename = "read:volumes")]
-    ReadColonVolumes,
+    READ_VOLUMES,
     #[serde(rename = "write:volumes")]
-    WriteColonVolumes,
+    WRITE_VOLUMES,
     #[serde(rename = "delete:volumes")]
-    DeleteColonVolumes,
+    DELETE_VOLUMES,
     #[serde(rename = "write:regions")]
-    WriteColonRegions,
+    WRITE_REGIONS,
     #[serde(rename = "delete:regions")]
-    DeleteColonRegions,
+    DELETE_REGIONS,
     #[serde(rename = "read:runners")]
-    ReadColonRunners,
+    READ_RUNNERS,
     #[serde(rename = "write:runners")]
-    WriteColonRunners,
+    WRITE_RUNNERS,
     #[serde(rename = "delete:runners")]
-    DeleteColonRunners,
+    DELETE_RUNNERS,
     #[serde(rename = "read:audit_logs")]
-    ReadColonAuditLogs,
+    READ_AUDIT_LOGS,
+    #[serde(rename = "manage:api_keys")]
+    MANAGE_API_KEYS,
+    #[serde(rename = "manage:secrets")]
+    MANAGE_SECRETS,
+    #[serde(rename = "read:limits")]
+    READ_LIMITS,
+    #[serde(rename = "manage:sso")]
+    MANAGE_SSO,
+    #[serde(rename = "read:billing")]
+    READ_BILLING,
+    #[serde(rename = "manage:billing")]
+    MANAGE_BILLING,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Permissions {
     fn default() -> Permissions {
-        Self::WriteColonRegistries
+        Self::WRITE_REGISTRIES
     }
 }
-

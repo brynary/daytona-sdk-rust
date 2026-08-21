@@ -43,6 +43,18 @@ pub struct Sandbox {
     /// Comma-separated list of allowed CIDR network addresses for the sandbox
     #[serde(rename = "networkAllowList", skip_serializing_if = "Option::is_none")]
     pub network_allow_list: Option<String>,
+    /// Comma-separated list of allowed domains for the sandbox
+    #[serde(rename = "domainAllowList", skip_serializing_if = "Option::is_none")]
+    pub domain_allow_list: Option<String>,
+    /// Outbound proxy URL the sandbox HTTP(S) traffic is routed through. Applied via the HTTP(S)_PROXY environment variables (convenience routing); network-layer enforcement applies only when the sandbox also has a domainAllowList. Only returned on single-sandbox reads — never on list responses.
+    #[serde(rename = "outboundProxyUrl", skip_serializing_if = "Option::is_none")]
+    pub outbound_proxy_url: Option<String>,
+    /// OTel collector endpoint override for this sandbox. When set, sandbox OTel data is sent to this endpoint instead of the default collector and is not available in the Daytona analytics API or dashboard. Only returned on single-sandbox reads — never on list responses.
+    #[serde(
+        rename = "otelEndpointOverride",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub otel_endpoint_override: Option<String>,
     /// The target environment for the sandbox
     #[serde(rename = "target")]
     pub target: String,
@@ -52,6 +64,15 @@ pub struct Sandbox {
     /// The GPU quota for the sandbox
     #[serde(rename = "gpu")]
     pub gpu: f64,
+    /// Whether this is a spot GPU sandbox. Spot sandboxes may be instantly terminated to free capacity for on-demand GPU sandboxes. Absent on APIs that predate this field; treat as false.
+    #[serde(rename = "spot", skip_serializing_if = "Option::is_none")]
+    pub spot: Option<bool>,
+    /// When this sandbox was destroyed by spot preemption. Set only for spot-evicted sandboxes, which stay retrievable by ID for 24 hours after eviction.
+    #[serde(rename = "spotEvictedAt", skip_serializing_if = "Option::is_none")]
+    pub spot_evicted_at: Option<String>,
+    /// The GPU type assigned to the sandbox
+    #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
+    pub gpu_type: Option<models::GpuType>,
     /// The memory quota for the sandbox
     #[serde(rename = "memory")]
     pub memory: f64,
@@ -70,6 +91,9 @@ pub struct Sandbox {
     /// Whether the sandbox error is recoverable.
     #[serde(rename = "recoverable", skip_serializing_if = "Option::is_none")]
     pub recoverable: Option<bool>,
+    /// Id of the warm pool this sandbox waits in; set only while it is an unclaimed member.
+    #[serde(rename = "warmPoolId", skip_serializing_if = "Option::is_none")]
+    pub warm_pool_id: Option<String>,
     /// The state of the backup
     #[serde(rename = "backupState", skip_serializing_if = "Option::is_none")]
     pub backup_state: Option<BackupState>,
@@ -79,12 +103,21 @@ pub struct Sandbox {
     /// Auto-stop interval in minutes (0 means disabled)
     #[serde(rename = "autoStopInterval", skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<f64>,
+    /// Auto-pause interval in minutes (0 means disabled)
+    #[serde(rename = "autoPauseInterval", skip_serializing_if = "Option::is_none")]
+    pub auto_pause_interval: Option<f64>,
     /// Auto-archive interval in minutes
-    #[serde(rename = "autoArchiveInterval", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "autoArchiveInterval",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_archive_interval: Option<f64>,
     /// Auto-delete interval in minutes (negative value means disabled, 0 means delete immediately upon stopping)
     #[serde(rename = "autoDeleteInterval", skip_serializing_if = "Option::is_none")]
     pub auto_delete_interval: Option<f64>,
+    /// When the sandbox will be automatically destroyed, regardless of its state (only set when a TTL is configured)
+    #[serde(rename = "autoDestroyAt", skip_serializing_if = "Option::is_none")]
+    pub auto_destroy_at: Option<String>,
     /// Array of volumes attached to the sandbox
     #[serde(rename = "volumes", skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<models::SandboxVolume>>,
@@ -97,19 +130,43 @@ pub struct Sandbox {
     /// The last update timestamp of the sandbox
     #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// The last activity timestamp of the sandbox
+    #[serde(rename = "lastActivityAt", skip_serializing_if = "Option::is_none")]
+    pub last_activity_at: Option<String>,
     /// The class of the sandbox
-    #[serde(rename = "class", skip_serializing_if = "Option::is_none")]
-    pub class: Option<Class>,
+    #[serde(rename = "sandboxClass", skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<SandboxClass>,
     /// The version of the daemon running in the sandbox
     #[serde(rename = "daemonVersion", skip_serializing_if = "Option::is_none")]
     pub daemon_version: Option<String>,
     /// The runner ID of the sandbox
     #[serde(rename = "runnerId", skip_serializing_if = "Option::is_none")]
     pub runner_id: Option<String>,
+    /// ID of the sandbox this sandbox is linked to. When set, the sandbox is co-located on the same runner as the linked sandbox.
+    #[serde(rename = "linkedSandboxId", skip_serializing_if = "Option::is_none")]
+    pub linked_sandbox_id: Option<String>,
+    /// The toolbox proxy URL for the sandbox
+    #[serde(rename = "toolboxProxyUrl")]
+    pub toolbox_proxy_url: String,
 }
 
 impl Sandbox {
-    pub fn new(id: String, organization_id: String, name: String, user: String, env: std::collections::HashMap<String, String>, labels: std::collections::HashMap<String, String>, public: bool, network_block_all: bool, target: String, cpu: f64, gpu: f64, memory: f64, disk: f64) -> Sandbox {
+    pub fn new(
+        id: String,
+        organization_id: String,
+        name: String,
+        user: String,
+        env: std::collections::HashMap<String, String>,
+        labels: std::collections::HashMap<String, String>,
+        public: bool,
+        network_block_all: bool,
+        target: String,
+        cpu: f64,
+        gpu: f64,
+        memory: f64,
+        disk: f64,
+        toolbox_proxy_url: String,
+    ) -> Sandbox {
         Sandbox {
             id,
             organization_id,
@@ -121,27 +178,39 @@ impl Sandbox {
             public,
             network_block_all,
             network_allow_list: None,
+            domain_allow_list: None,
+            outbound_proxy_url: None,
+            otel_endpoint_override: None,
             target,
             cpu,
             gpu,
+            spot: None,
+            spot_evicted_at: None,
+            gpu_type: None,
             memory,
             disk,
             state: None,
             desired_state: None,
             error_reason: None,
             recoverable: None,
+            warm_pool_id: None,
             backup_state: None,
             backup_created_at: None,
             auto_stop_interval: None,
+            auto_pause_interval: None,
             auto_archive_interval: None,
             auto_delete_interval: None,
+            auto_destroy_at: None,
             volumes: None,
             build_info: None,
             created_at: None,
             updated_at: None,
-            class: None,
+            last_activity_at: None,
+            sandbox_class: None,
             daemon_version: None,
             runner_id: None,
+            linked_sandbox_id: None,
+            toolbox_proxy_url,
         }
     }
 }
@@ -158,6 +227,8 @@ pub enum BackupState {
     Completed,
     #[serde(rename = "Error")]
     Error,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for BackupState {
@@ -167,18 +238,21 @@ impl Default for BackupState {
 }
 /// The class of the sandbox
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Class {
-    #[serde(rename = "small")]
-    Small,
-    #[serde(rename = "medium")]
-    Medium,
-    #[serde(rename = "large")]
-    Large,
+pub enum SandboxClass {
+    #[serde(rename = "linux-vm")]
+    LINUX_VM,
+    #[serde(rename = "container")]
+    CONTAINER,
+    #[serde(rename = "android")]
+    ANDROID,
+    #[serde(rename = "windows")]
+    WINDOWS,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
-impl Default for Class {
-    fn default() -> Class {
-        Self::Small
+impl Default for SandboxClass {
+    fn default() -> SandboxClass {
+        Self::LINUX_VM
     }
 }
-

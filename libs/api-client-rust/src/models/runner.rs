@@ -40,32 +40,56 @@ pub struct Runner {
     /// The type of GPU
     #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
     pub gpu_type: Option<String>,
-    /// The class of the runner
-    #[serde(rename = "class")]
-    pub class: models::SandboxClass,
+    /// The sandbox class supported by this runner
+    #[serde(rename = "sandboxClass", skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<models::SandboxClass>,
     /// Current CPU usage percentage
-    #[serde(rename = "currentCpuUsagePercentage", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentCpuUsagePercentage",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_cpu_usage_percentage: Option<f64>,
     /// Current RAM usage percentage
-    #[serde(rename = "currentMemoryUsagePercentage", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentMemoryUsagePercentage",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_memory_usage_percentage: Option<f64>,
     /// Current disk usage percentage
-    #[serde(rename = "currentDiskUsagePercentage", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentDiskUsagePercentage",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_disk_usage_percentage: Option<f64>,
     /// Current allocated CPU
-    #[serde(rename = "currentAllocatedCpu", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentAllocatedCpu",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_allocated_cpu: Option<f64>,
     /// Current allocated memory in GiB
-    #[serde(rename = "currentAllocatedMemoryGiB", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentAllocatedMemoryGiB",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_allocated_memory_gi_b: Option<f64>,
     /// Current allocated disk in GiB
-    #[serde(rename = "currentAllocatedDiskGiB", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentAllocatedDiskGiB",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_allocated_disk_gi_b: Option<f64>,
     /// Current snapshot count
-    #[serde(rename = "currentSnapshotCount", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentSnapshotCount",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_snapshot_count: Option<f64>,
     /// Current number of started sandboxes
-    #[serde(rename = "currentStartedSandboxes", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "currentStartedSandboxes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub current_started_sandboxes: Option<f64>,
     /// Runner availability score
     #[serde(rename = "availabilityScore", skip_serializing_if = "Option::is_none")]
@@ -85,6 +109,9 @@ pub struct Runner {
     /// Whether the runner is unschedulable
     #[serde(rename = "unschedulable")]
     pub unschedulable: bool,
+    /// Tags associated with the runner
+    #[serde(rename = "tags")]
+    pub tags: Vec<String>,
     /// The creation timestamp of the runner
     #[serde(rename = "createdAt")]
     pub created_at: String,
@@ -97,13 +124,34 @@ pub struct Runner {
     /// The api version of the runner
     #[serde(rename = "apiVersion")]
     pub api_version: String,
+    /// The class of the runner. Deprecated and always returns \"container\" for backward compatibility - use sandboxClass instead.
+    #[serde(rename = "runnerClass")]
+    pub runner_class: models::RunnerClass,
     /// The app version of the runner
     #[serde(rename = "appVersion", skip_serializing_if = "Option::is_none")]
     pub app_version: Option<String>,
+    /// Deprecated runner class property
+    #[serde(rename = "class", skip_serializing_if = "Option::is_none")]
+    pub class: Option<String>,
 }
 
 impl Runner {
-    pub fn new(id: String, cpu: f64, memory: f64, disk: f64, class: models::SandboxClass, region: String, name: String, state: models::RunnerState, unschedulable: bool, created_at: String, updated_at: String, version: String, api_version: String) -> Runner {
+    pub fn new(
+        id: String,
+        cpu: f64,
+        memory: f64,
+        disk: f64,
+        region: String,
+        name: String,
+        state: models::RunnerState,
+        unschedulable: bool,
+        tags: Vec<String>,
+        created_at: String,
+        updated_at: String,
+        version: String,
+        api_version: String,
+        runner_class: models::RunnerClass,
+    ) -> Runner {
         Runner {
             id,
             domain: None,
@@ -114,7 +162,7 @@ impl Runner {
             disk,
             gpu: None,
             gpu_type: None,
-            class,
+            sandbox_class: None,
             current_cpu_usage_percentage: None,
             current_memory_usage_percentage: None,
             current_disk_usage_percentage: None,
@@ -129,12 +177,14 @@ impl Runner {
             state,
             last_checked: None,
             unschedulable,
+            tags,
             created_at,
             updated_at,
             version,
             api_version,
+            runner_class,
             app_version: None,
+            class: None,
         }
     }
 }
-

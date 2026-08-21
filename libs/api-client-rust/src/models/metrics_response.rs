@@ -20,9 +20,6 @@ pub struct MetricsResponse {
 
 impl MetricsResponse {
     pub fn new(series: Vec<models::MetricSeries>) -> MetricsResponse {
-        MetricsResponse {
-            series,
-        }
+        MetricsResponse { series }
     }
 }
-

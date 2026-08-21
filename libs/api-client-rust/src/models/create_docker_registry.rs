@@ -28,43 +28,21 @@ pub struct CreateDockerRegistry {
     /// Registry project
     #[serde(rename = "project", skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
-    /// Registry type
-    #[serde(rename = "registryType")]
-    pub registry_type: RegistryType,
-    /// Set as default registry
-    #[serde(rename = "isDefault", skip_serializing_if = "Option::is_none")]
-    pub is_default: Option<bool>,
 }
 
 impl CreateDockerRegistry {
-    pub fn new(name: String, url: String, username: String, password: String, registry_type: RegistryType) -> CreateDockerRegistry {
+    pub fn new(
+        name: String,
+        url: String,
+        username: String,
+        password: String,
+    ) -> CreateDockerRegistry {
         CreateDockerRegistry {
             name,
             url,
             username,
             password,
             project: None,
-            registry_type,
-            is_default: None,
         }
     }
 }
-/// Registry type
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum RegistryType {
-    #[serde(rename = "internal")]
-    Internal,
-    #[serde(rename = "organization")]
-    Organization,
-    #[serde(rename = "transient")]
-    Transient,
-    #[serde(rename = "backup")]
-    Backup,
-}
-
-impl Default for RegistryType {
-    fn default() -> RegistryType {
-        Self::Internal
-    }
-}
-

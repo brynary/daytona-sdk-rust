@@ -25,6 +25,9 @@ pub struct RateLimitConfig {
     /// Sandbox lifecycle rate limit
     #[serde(rename = "sandboxLifecycle", skip_serializing_if = "Option::is_none")]
     pub sandbox_lifecycle: Option<Box<models::RateLimitEntry>>,
+    /// Sandbox list rate limit
+    #[serde(rename = "sandboxList", skip_serializing_if = "Option::is_none")]
+    pub sandbox_list: Option<Box<models::RateLimitEntry>>,
 }
 
 impl RateLimitConfig {
@@ -34,7 +37,7 @@ impl RateLimitConfig {
             authenticated: None,
             sandbox_create: None,
             sandbox_lifecycle: None,
+            sandbox_list: None,
         }
     }
 }
-

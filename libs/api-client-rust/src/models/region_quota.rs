@@ -17,23 +17,84 @@ pub struct RegionQuota {
     pub organization_id: String,
     #[serde(rename = "regionId")]
     pub region_id: String,
+    #[serde(rename = "sandboxClass")]
+    pub sandbox_class: models::SandboxClass,
     #[serde(rename = "totalCpuQuota")]
     pub total_cpu_quota: f64,
     #[serde(rename = "totalMemoryQuota")]
     pub total_memory_quota: f64,
     #[serde(rename = "totalDiskQuota")]
     pub total_disk_quota: f64,
+    #[serde(rename = "totalGpuQuota")]
+    pub total_gpu_quota: f64,
+    #[serde(rename = "allowedGpuTypes", skip_serializing_if = "Option::is_none")]
+    pub allowed_gpu_types: Option<Vec<models::GpuType>>,
+    #[serde(rename = "maxCpuPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_memory_per_sandbox: Option<f64>,
+    #[serde(rename = "maxDiskPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxDiskPerNonEphemeralSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_disk_per_non_ephemeral_sandbox: Option<f64>,
+    /// CPU maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxCpuPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_gpu: Option<f64>,
+    /// Memory maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxMemoryPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_memory_per_gpu: Option<f64>,
+    /// Disk maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxDiskPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_gpu: Option<f64>,
+    /// Maximum sandbox lifespan in minutes, measured from sandbox creation to its auto-destroy deadline. If null or 0, lifespan is unrestricted. When set, sandboxes created without a TTL default to this lifespan and TTL cannot be disabled.
+    #[serde(
+        rename = "maxSandboxLifespan",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_sandbox_lifespan: Option<f64>,
 }
 
 impl RegionQuota {
-    pub fn new(organization_id: String, region_id: String, total_cpu_quota: f64, total_memory_quota: f64, total_disk_quota: f64) -> RegionQuota {
+    pub fn new(
+        organization_id: String,
+        region_id: String,
+        sandbox_class: models::SandboxClass,
+        total_cpu_quota: f64,
+        total_memory_quota: f64,
+        total_disk_quota: f64,
+        total_gpu_quota: f64,
+        max_cpu_per_sandbox: Option<f64>,
+        max_memory_per_sandbox: Option<f64>,
+        max_disk_per_sandbox: Option<f64>,
+        max_disk_per_non_ephemeral_sandbox: Option<f64>,
+        max_cpu_per_gpu: Option<f64>,
+        max_memory_per_gpu: Option<f64>,
+        max_disk_per_gpu: Option<f64>,
+        max_sandbox_lifespan: Option<f64>,
+    ) -> RegionQuota {
         RegionQuota {
             organization_id,
             region_id,
+            sandbox_class,
             total_cpu_quota,
             total_memory_quota,
             total_disk_quota,
+            total_gpu_quota,
+            allowed_gpu_types: None,
+            max_cpu_per_sandbox,
+            max_memory_per_sandbox,
+            max_disk_per_sandbox,
+            max_disk_per_non_ephemeral_sandbox,
+            max_cpu_per_gpu,
+            max_memory_per_gpu,
+            max_disk_per_gpu,
+            max_sandbox_lifespan,
         }
     }
 }
-

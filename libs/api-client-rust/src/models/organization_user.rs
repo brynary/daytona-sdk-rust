@@ -40,7 +40,16 @@ pub struct OrganizationUser {
 }
 
 impl OrganizationUser {
-    pub fn new(user_id: String, organization_id: String, name: String, email: String, role: Role, assigned_roles: Vec<models::OrganizationRole>, created_at: String, updated_at: String) -> OrganizationUser {
+    pub fn new(
+        user_id: String,
+        organization_id: String,
+        name: String,
+        email: String,
+        role: Role,
+        assigned_roles: Vec<models::OrganizationRole>,
+        created_at: String,
+        updated_at: String,
+    ) -> OrganizationUser {
         OrganizationUser {
             user_id,
             organization_id,
@@ -60,6 +69,8 @@ pub enum Role {
     Owner,
     #[serde(rename = "member")]
     Member,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Role {
@@ -67,4 +78,3 @@ impl Default for Role {
         Self::Owner
     }
 }
-

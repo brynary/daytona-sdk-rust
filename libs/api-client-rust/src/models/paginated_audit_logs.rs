@@ -27,7 +27,12 @@ pub struct PaginatedAuditLogs {
 }
 
 impl PaginatedAuditLogs {
-    pub fn new(items: Vec<models::AuditLog>, total: f64, page: f64, total_pages: f64) -> PaginatedAuditLogs {
+    pub fn new(
+        items: Vec<models::AuditLog>,
+        total: f64,
+        page: f64,
+        total_pages: f64,
+    ) -> PaginatedAuditLogs {
         PaginatedAuditLogs {
             items,
             total,
@@ -37,4 +42,3 @@ impl PaginatedAuditLogs {
         }
     }
 }
-

@@ -127,6 +127,7 @@ impl Client {
     /// List sandboxes with optional label filtering and pagination.
     ///
     /// Returns a paginated result matching the Go/TypeScript SDK behavior.
+    #[allow(deprecated)]
     pub async fn list(
         &self,
         labels: Option<&HashMap<String, String>>,
@@ -146,7 +147,7 @@ impl Client {
 
         let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
 
-        let result = sandbox_api::list_sandboxes_paginated(
+        let result = sandbox_api::list_sandboxes_paginated_deprecated(
             &self.api_config,
             self.config.organization_id.as_deref(),
             page.map(|p| p as f64),
@@ -204,6 +205,7 @@ impl Client {
     /// If `sandbox_id_or_name` is provided, delegates to [`Client::get`].
     /// Otherwise, searches for sandboxes matching the provided labels and returns
     /// the first match. Returns a not-found error if no matching sandbox is found.
+    #[allow(deprecated)]
     pub async fn find_one(
         &self,
         sandbox_id_or_name: Option<&str>,
@@ -217,7 +219,7 @@ impl Client {
 
         let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
 
-        let api_sandboxes = sandbox_api::list_sandboxes_paginated(
+        let api_sandboxes = sandbox_api::list_sandboxes_paginated_deprecated(
             &self.api_config,
             self.config.organization_id.as_deref(),
             Some(1.0), // page
@@ -311,6 +313,7 @@ impl Client {
             &self.api_config,
             sandbox_id_or_name,
             self.config.organization_id.as_deref(),
+            None,
         )
         .await
         .map_err(convert_api_error)?;
@@ -745,6 +748,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -808,6 +812,7 @@ mod tests {
                     "public": false,
                     "networkBlockAll": false,
                     "target": "us",
+                    "toolboxProxyUrl": "https://proxy.example.com/toolbox",
                     "cpu": 2.0,
                     "gpu": 0.0,
                     "memory": 4.0,
@@ -823,6 +828,7 @@ mod tests {
                     "public": false,
                     "networkBlockAll": false,
                     "target": "us",
+                    "toolboxProxyUrl": "https://proxy.example.com/toolbox",
                     "cpu": 2.0,
                     "gpu": 0.0,
                     "memory": 4.0,
@@ -868,6 +874,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -926,6 +933,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -983,6 +991,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -1059,6 +1068,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -1097,6 +1107,7 @@ mod tests {
                 "public": false,
                 "networkBlockAll": false,
                 "target": "us",
+                "toolboxProxyUrl": "https://proxy.example.com/toolbox",
                 "cpu": 2.0,
                 "gpu": 0.0,
                 "memory": 4.0,

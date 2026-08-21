@@ -22,15 +22,15 @@ pub struct CreateSnapshot {
     /// The entrypoint command for the snapshot
     #[serde(rename = "entrypoint", skip_serializing_if = "Option::is_none")]
     pub entrypoint: Option<Vec<String>>,
-    /// Whether the snapshot is general
-    #[serde(rename = "general", skip_serializing_if = "Option::is_none")]
-    pub general: Option<bool>,
     /// CPU cores allocated to the resulting sandbox
     #[serde(rename = "cpu", skip_serializing_if = "Option::is_none")]
     pub cpu: Option<i32>,
     /// GPU units allocated to the resulting sandbox
     #[serde(rename = "gpu", skip_serializing_if = "Option::is_none")]
     pub gpu: Option<i32>,
+    /// Preferred GPU type for the resulting sandbox.
+    #[serde(rename = "gpuType", skip_serializing_if = "Option::is_none")]
+    pub gpu_type: Option<Vec<models::GpuType>>,
     /// Memory allocated to the resulting sandbox in GB
     #[serde(rename = "memory", skip_serializing_if = "Option::is_none")]
     pub memory: Option<i32>,
@@ -43,6 +43,9 @@ pub struct CreateSnapshot {
     /// ID of the region where the snapshot will be available. Defaults to organization default region if not specified.
     #[serde(rename = "regionId", skip_serializing_if = "Option::is_none")]
     pub region_id: Option<String>,
+    /// Target sandbox class. Determines which runners can host sandboxes created from this snapshot.
+    #[serde(rename = "sandboxClass", skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<models::SandboxClass>,
 }
 
 impl CreateSnapshot {
@@ -51,14 +54,14 @@ impl CreateSnapshot {
             name,
             image_name: None,
             entrypoint: None,
-            general: None,
             cpu: None,
             gpu: None,
+            gpu_type: None,
             memory: None,
             disk: None,
             build_info: None,
             region_id: None,
+            sandbox_class: None,
         }
     }
 }
-

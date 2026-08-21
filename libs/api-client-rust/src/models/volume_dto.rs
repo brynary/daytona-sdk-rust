@@ -32,7 +32,12 @@ pub struct VolumeDto {
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
     /// Last used timestamp
-    #[serde(rename = "lastUsedAt", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "lastUsedAt",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_used_at: Option<Option<String>>,
     /// The error reason of the volume
     #[serde(rename = "errorReason", deserialize_with = "Option::deserialize")]
@@ -40,7 +45,15 @@ pub struct VolumeDto {
 }
 
 impl VolumeDto {
-    pub fn new(id: String, name: String, organization_id: String, state: models::VolumeState, created_at: String, updated_at: String, error_reason: Option<String>) -> VolumeDto {
+    pub fn new(
+        id: String,
+        name: String,
+        organization_id: String,
+        state: models::VolumeState,
+        created_at: String,
+        updated_at: String,
+        error_reason: Option<String>,
+    ) -> VolumeDto {
         VolumeDto {
             id,
             name,
@@ -53,4 +66,3 @@ impl VolumeDto {
         }
     }
 }
-

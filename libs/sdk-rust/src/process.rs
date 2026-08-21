@@ -60,10 +60,10 @@ impl ProcessService {
     ) -> Result<ExecuteResponse, DaytonaError> {
         let timeout_secs = options.timeout.map(|d| d.as_secs() as i32);
 
-        // Note: env parameter not supported in current toolbox API
         let exec_body = daytona_toolbox_client::models::ExecuteRequest {
             command: command.to_string(),
             cwd: options.cwd,
+            envs: options.env.filter(|env| !env.is_empty()),
             timeout: timeout_secs,
         };
 
@@ -641,7 +641,7 @@ fn shell_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn process_service(mock_server: &MockServer) -> ProcessService {
@@ -701,6 +701,42 @@ mod tests {
         };
         let result = svc.execute_command("pwd", opts).await.unwrap();
         assert_eq!(result.exit_code, 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_command_with_environment() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/process/execute"))
+            .and(body_json(serde_json::json!({
+                "command": "printenv MODE",
+                "envs": {"MODE": "test"}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "command": "printenv MODE",
+                "exitCode": 0,
+                "result": "test\n"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let svc = process_service(&mock_server).await;
+        let result = svc
+            .execute_command(
+                "printenv MODE",
+                ExecuteCommandOptions {
+                    env: Some(std::collections::HashMap::from([(
+                        "MODE".to_string(),
+                        "test".to_string(),
+                    )])),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.result, "test\n");
     }
 
     #[tokio::test]

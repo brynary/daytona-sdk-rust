@@ -20,9 +20,6 @@ pub struct SetSnapshotGeneralStatusDto {
 
 impl SetSnapshotGeneralStatusDto {
     pub fn new(general: bool) -> SetSnapshotGeneralStatusDto {
-        SetSnapshotGeneralStatusDto {
-            general,
-        }
+        SetSnapshotGeneralStatusDto { general }
     }
 }
-

@@ -29,7 +29,8 @@ pub enum VolumeState {
     Deleted,
     #[serde(rename = "error")]
     Error,
-
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for VolumeState {
@@ -42,6 +43,7 @@ impl std::fmt::Display for VolumeState {
             Self::Deleting => write!(f, "deleting"),
             Self::Deleted => write!(f, "deleted"),
             Self::Error => write!(f, "error"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -51,4 +53,3 @@ impl Default for VolumeState {
         Self::Creating
     }
 }
-

@@ -22,6 +22,12 @@ pub struct User {
     /// User email
     #[serde(rename = "email")]
     pub email: String,
+    /// Whether the user email address has been verified
+    #[serde(rename = "emailVerified")]
+    pub email_verified: bool,
+    /// HMAC of the user email for Pylon support-widget identity verification
+    #[serde(rename = "pylonEmailHash", skip_serializing_if = "Option::is_none")]
+    pub pylon_email_hash: Option<String>,
     /// User public keys
     #[serde(rename = "publicKeys")]
     pub public_keys: Vec<models::UserPublicKey>,
@@ -31,14 +37,22 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(id: String, name: String, email: String, public_keys: Vec<models::UserPublicKey>, created_at: String) -> User {
+    pub fn new(
+        id: String,
+        name: String,
+        email: String,
+        email_verified: bool,
+        public_keys: Vec<models::UserPublicKey>,
+        created_at: String,
+    ) -> User {
         User {
             id,
             name,
             email,
+            email_verified,
+            pylon_email_hash: None,
             public_keys,
             created_at,
         }
     }
 }
-

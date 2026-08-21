@@ -34,7 +34,14 @@ pub struct RegistryPushAccessDto {
 }
 
 impl RegistryPushAccessDto {
-    pub fn new(username: String, secret: String, registry_url: String, registry_id: String, project: String, expires_at: String) -> RegistryPushAccessDto {
+    pub fn new(
+        username: String,
+        secret: String,
+        registry_url: String,
+        registry_id: String,
+        project: String,
+        expires_at: String,
+    ) -> RegistryPushAccessDto {
         RegistryPushAccessDto {
             username,
             secret,
@@ -45,4 +52,3 @@ impl RegistryPushAccessDto {
         }
     }
 }
-

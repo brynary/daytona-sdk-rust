@@ -314,6 +314,8 @@ pub struct GitCloneOptions {
     pub commit_id: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+    pub insecure_skip_tls: Option<bool>,
+    pub depth: Option<i32>,
 }
 
 /// Options for git commit.
@@ -327,6 +329,9 @@ pub struct GitCommitOptions {
 pub struct GitPushOptions {
     pub username: Option<String>,
     pub password: Option<String>,
+    pub branch: Option<String>,
+    pub remote: Option<String>,
+    pub set_upstream: Option<bool>,
 }
 
 /// Options for git pull.
@@ -334,6 +339,8 @@ pub struct GitPushOptions {
 pub struct GitPullOptions {
     pub username: Option<String>,
     pub password: Option<String>,
+    pub branch: Option<String>,
+    pub remote: Option<String>,
 }
 
 /// Options for git delete branch.

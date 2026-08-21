@@ -14,14 +14,37 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateRegion {
     /// Proxy URL for the region
-    #[serde(rename = "proxyUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "proxyUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub proxy_url: Option<Option<String>>,
     /// SSH Gateway URL for the region
-    #[serde(rename = "sshGatewayUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sshGatewayUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ssh_gateway_url: Option<Option<String>>,
     /// Snapshot Manager URL for the region
-    #[serde(rename = "snapshotManagerUrl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "snapshotManagerUrl",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub snapshot_manager_url: Option<Option<String>>,
+    /// OTel collector endpoint for sandboxes created in this region. When set, sandbox OTel data is sent to this endpoint instead of the Daytona-hosted collector and will not be available in the Daytona analytics API or dashboard.
+    #[serde(
+        rename = "otelEndpoint",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub otel_endpoint: Option<Option<String>>,
 }
 
 impl UpdateRegion {
@@ -30,7 +53,7 @@ impl UpdateRegion {
             proxy_url: None,
             ssh_gateway_url: None,
             snapshot_manager_url: None,
+            otel_endpoint: None,
         }
     }
 }
-

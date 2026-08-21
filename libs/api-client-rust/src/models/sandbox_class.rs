@@ -11,32 +11,35 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// SandboxClass : The class of the runner
-/// The class of the runner
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SandboxClass {
-    #[serde(rename = "small")]
-    Small,
-    #[serde(rename = "medium")]
-    Medium,
-    #[serde(rename = "large")]
-    Large,
-
+    #[serde(rename = "linux-vm")]
+    LINUX_VM,
+    #[serde(rename = "container")]
+    CONTAINER,
+    #[serde(rename = "android")]
+    ANDROID,
+    #[serde(rename = "windows")]
+    WINDOWS,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for SandboxClass {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Small => write!(f, "small"),
-            Self::Medium => write!(f, "medium"),
-            Self::Large => write!(f, "large"),
+            Self::LINUX_VM => write!(f, "linux-vm"),
+            Self::CONTAINER => write!(f, "container"),
+            Self::ANDROID => write!(f, "android"),
+            Self::WINDOWS => write!(f, "windows"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
 
 impl Default for SandboxClass {
     fn default() -> SandboxClass {
-        Self::Small
+        Self::LINUX_VM
     }
 }
-

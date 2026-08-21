@@ -17,6 +17,9 @@ pub struct CreateRunner {
     pub region_id: String,
     #[serde(rename = "name")]
     pub name: String,
+    /// Tags to associate with the runner
+    #[serde(rename = "tags", skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 impl CreateRunner {
@@ -24,7 +27,7 @@ impl CreateRunner {
         CreateRunner {
             region_id,
             name,
+            tags: None,
         }
     }
 }
-

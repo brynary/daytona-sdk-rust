@@ -179,7 +179,7 @@ impl Sandbox {
     pub async fn stop_with_timeout(&mut self, timeout: Duration) -> Result<(), DaytonaError> {
         let start_time = tokio::time::Instant::now();
         let api_sandbox =
-            sandbox_api::stop_sandbox(&self.api_config, &self.id, self.org_id.as_deref())
+            sandbox_api::stop_sandbox(&self.api_config, &self.id, self.org_id.as_deref(), None)
                 .await
                 .map_err(convert_api_error)?;
         // Update local state immediately from the API response (matching TS behavior)
@@ -226,7 +226,7 @@ impl Sandbox {
     pub async fn recover_with_timeout(&mut self, timeout: Duration) -> Result<(), DaytonaError> {
         let start_time = tokio::time::Instant::now();
         let api_sandbox =
-            sandbox_api::recover_sandbox(&self.api_config, &self.id, self.org_id.as_deref())
+            sandbox_api::recover_sandbox(&self.api_config, &self.id, self.org_id.as_deref(), None)
                 .await
                 .map_err(convert_api_error)?;
         // Update local state immediately from the API response (matching TS behavior)
@@ -242,7 +242,7 @@ impl Sandbox {
     /// auto-archive, auto-delete). Useful for keeping long-running sessions alive
     /// while there is still user activity.
     pub async fn refresh_activity(&self) -> Result<(), DaytonaError> {
-        sandbox_api::update_last_activity(&self.api_config, &self.id, self.org_id.as_deref())
+        sandbox_api::update_last_activity(&self.api_config, &self.id, self.org_id.as_deref(), None)
             .await
             .map_err(convert_api_error)?;
         Ok(())
@@ -1001,6 +1001,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,
@@ -1196,6 +1197,7 @@ mod tests {
             "public": false,
             "networkBlockAll": false,
             "target": "us",
+            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
             "cpu": 2.0,
             "gpu": 0.0,
             "memory": 4.0,

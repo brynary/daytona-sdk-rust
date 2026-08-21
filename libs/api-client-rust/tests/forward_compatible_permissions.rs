@@ -16,7 +16,7 @@ fn api_key_list_accepts_mixed_known_and_new_permissions() {
             "delete:sandboxes",
             "manage:secrets",
             "read:limits",
-            "manage:sso"
+            "future:permission"
         ],
         "lastUsedAt": null,
         "expiresAt": null,
@@ -27,11 +27,11 @@ fn api_key_list_accepts_mixed_known_and_new_permissions() {
     assert_eq!(
         api_key.permissions,
         vec![
-            ApiKeyListPermission::WriteColonSandboxes,
-            ApiKeyListPermission::DeleteColonSandboxes,
-            ApiKeyListPermission::Unknown,
-            ApiKeyListPermission::Unknown,
-            ApiKeyListPermission::Unknown,
+            ApiKeyListPermission::WRITE_SANDBOXES,
+            ApiKeyListPermission::DELETE_SANDBOXES,
+            ApiKeyListPermission::MANAGE_SECRETS,
+            ApiKeyListPermission::READ_LIMITS,
+            ApiKeyListPermission::UnknownDefaultOpenApi,
         ]
     );
 }
@@ -42,15 +42,15 @@ fn response_permissions_accept_unknown_values() {
 
     assert_eq!(
         serde_json::from_str::<ApiKeyListPermission>(unknown).unwrap(),
-        ApiKeyListPermission::Unknown
+        ApiKeyListPermission::UnknownDefaultOpenApi
     );
     assert_eq!(
         serde_json::from_str::<ApiKeyResponsePermission>(unknown).unwrap(),
-        ApiKeyResponsePermission::Unknown
+        ApiKeyResponsePermission::UnknownDefaultOpenApi
     );
     assert_eq!(
         serde_json::from_str::<OrganizationRolePermission>(unknown).unwrap(),
-        OrganizationRolePermission::Unknown
+        OrganizationRolePermission::UnknownDefaultOpenApi
     );
 }
 
@@ -58,7 +58,7 @@ fn response_permissions_accept_unknown_values() {
 fn response_permissions_preserve_known_values() {
     assert_eq!(
         serde_json::from_str::<ApiKeyListPermission>(r#""write:sandboxes""#).unwrap(),
-        ApiKeyListPermission::WriteColonSandboxes
+        ApiKeyListPermission::WRITE_SANDBOXES
     );
 }
 

@@ -28,7 +28,11 @@ pub struct CreateOrganizationInvitation {
 }
 
 impl CreateOrganizationInvitation {
-    pub fn new(email: String, role: Role, assigned_role_ids: Vec<String>) -> CreateOrganizationInvitation {
+    pub fn new(
+        email: String,
+        role: Role,
+        assigned_role_ids: Vec<String>,
+    ) -> CreateOrganizationInvitation {
         CreateOrganizationInvitation {
             email,
             role,
@@ -44,6 +48,8 @@ pub enum Role {
     Owner,
     #[serde(rename = "member")]
     Member,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Role {
@@ -51,4 +57,3 @@ impl Default for Role {
         Self::Owner
     }
 }
-

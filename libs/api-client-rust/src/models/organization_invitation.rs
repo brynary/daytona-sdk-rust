@@ -49,7 +49,19 @@ pub struct OrganizationInvitation {
 }
 
 impl OrganizationInvitation {
-    pub fn new(id: String, email: String, invited_by: String, organization_id: String, organization_name: String, expires_at: String, status: Status, role: Role, assigned_roles: Vec<models::OrganizationRole>, created_at: String, updated_at: String) -> OrganizationInvitation {
+    pub fn new(
+        id: String,
+        email: String,
+        invited_by: String,
+        organization_id: String,
+        organization_name: String,
+        expires_at: String,
+        status: Status,
+        role: Role,
+        assigned_roles: Vec<models::OrganizationRole>,
+        created_at: String,
+        updated_at: String,
+    ) -> OrganizationInvitation {
         OrganizationInvitation {
             id,
             email,
@@ -76,6 +88,8 @@ pub enum Status {
     Declined,
     #[serde(rename = "cancelled")]
     Cancelled,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Status {
@@ -90,6 +104,8 @@ pub enum Role {
     Owner,
     #[serde(rename = "member")]
     Member,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Role {
@@ -97,4 +113,3 @@ impl Default for Role {
         Self::Owner
     }
 }
-

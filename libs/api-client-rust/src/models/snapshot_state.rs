@@ -11,7 +11,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SnapshotState {
     #[serde(rename = "building")]
@@ -20,6 +20,8 @@ pub enum SnapshotState {
     Pending,
     #[serde(rename = "pulling")]
     Pulling,
+    #[serde(rename = "snapshotting")]
+    Snapshotting,
     #[serde(rename = "active")]
     Active,
     #[serde(rename = "inactive")]
@@ -30,7 +32,8 @@ pub enum SnapshotState {
     BuildFailed,
     #[serde(rename = "removing")]
     Removing,
-
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for SnapshotState {
@@ -39,11 +42,13 @@ impl std::fmt::Display for SnapshotState {
             Self::Building => write!(f, "building"),
             Self::Pending => write!(f, "pending"),
             Self::Pulling => write!(f, "pulling"),
+            Self::Snapshotting => write!(f, "snapshotting"),
             Self::Active => write!(f, "active"),
             Self::Inactive => write!(f, "inactive"),
             Self::Error => write!(f, "error"),
             Self::BuildFailed => write!(f, "build_failed"),
             Self::Removing => write!(f, "removing"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -53,4 +58,3 @@ impl Default for SnapshotState {
         Self::Building
     }
 }
-

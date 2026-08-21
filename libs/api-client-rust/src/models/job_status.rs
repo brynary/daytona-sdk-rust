@@ -11,7 +11,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum JobStatus {
     #[serde(rename = "PENDING")]
@@ -22,7 +22,8 @@ pub enum JobStatus {
     Completed,
     #[serde(rename = "FAILED")]
     Failed,
-
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for JobStatus {
@@ -32,6 +33,7 @@ impl std::fmt::Display for JobStatus {
             Self::InProgress => write!(f, "IN_PROGRESS"),
             Self::Completed => write!(f, "COMPLETED"),
             Self::Failed => write!(f, "FAILED"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -41,4 +43,3 @@ impl Default for JobStatus {
         Self::Pending
     }
 }
-

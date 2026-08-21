@@ -29,6 +29,7 @@ impl SnapshotService {
             None,
             None,
             None,
+            None,
         )
         .await
         .map_err(convert_api_error)?;
@@ -68,9 +69,9 @@ impl SnapshotService {
                 create_req.image_name = Some(name.clone());
             }
             ImageSource::Custom(docker_image) => {
-                create_req.build_info = Some(Box::new(
-                    models::CreateBuildInfo::new(docker_image.dockerfile()),
-                ));
+                create_req.build_info = Some(Box::new(models::CreateBuildInfo::new(
+                    docker_image.dockerfile(),
+                )));
             }
         }
 
@@ -165,8 +166,8 @@ mod tests {
             .and(path("/snapshots"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "items": [
-                    {"id": "snap-1", "name": "ubuntu-22.04", "state": "active", "general": true, "cpu": 2.0, "gpu": 0.0, "mem": 4.0, "disk": 20.0, "size": null, "entrypoint": null, "errorReason": null, "lastUsedAt": null, "createdAt": "2024-01-01", "updatedAt": "2024-01-01"},
-                    {"id": "snap-2", "name": "python-3.11", "state": "active", "general": true, "cpu": 2.0, "gpu": 0.0, "mem": 4.0, "disk": 20.0, "size": null, "entrypoint": null, "errorReason": null, "lastUsedAt": null, "createdAt": "2024-01-01", "updatedAt": "2024-01-01"}
+                    {"id": "snap-1", "name": "ubuntu-22.04", "state": "active", "general": true, "cpu": 2.0, "gpu": 0.0, "mem": 4.0, "disk": 20.0, "size": null, "entrypoint": null, "errorReason": null, "lastUsedAt": null, "createdAt": "2024-01-01", "updatedAt": "2024-01-01", "sourceSandboxId": null},
+                    {"id": "snap-2", "name": "python-3.11", "state": "active", "general": true, "cpu": 2.0, "gpu": 0.0, "mem": 4.0, "disk": 20.0, "size": null, "entrypoint": null, "errorReason": null, "lastUsedAt": null, "createdAt": "2024-01-01", "updatedAt": "2024-01-01", "sourceSandboxId": null}
                 ],
                 "total": 2.0,
                 "page": 1.0,
@@ -200,7 +201,8 @@ mod tests {
                 "errorReason": null,
                 "lastUsedAt": null,
                 "createdAt": "2024-01-01",
-                "updatedAt": "2024-01-01"
+                "updatedAt": "2024-01-01",
+                "sourceSandboxId": null
             })))
             .mount(&mock_server)
             .await;

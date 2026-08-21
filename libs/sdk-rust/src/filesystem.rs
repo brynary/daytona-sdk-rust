@@ -31,7 +31,20 @@ impl FileSystemService {
         &self,
         dir_path: &str,
     ) -> Result<Vec<daytona_toolbox_client::models::FileInfo>, DaytonaError> {
-        let files = file_system_api::list_files(&self.config, Some(dir_path))
+        self.list_files_with_depth(dir_path, None).await
+    }
+
+    /// List files in a directory, optionally recursing to the specified depth.
+    pub async fn list_files_with_depth(
+        &self,
+        dir_path: &str,
+        depth: Option<i32>,
+    ) -> Result<Vec<daytona_toolbox_client::models::FileInfo>, DaytonaError> {
+        if matches!(depth, Some(value) if value < 1) {
+            return Err(DaytonaError::general("depth must be at least 1"));
+        }
+
+        let files = file_system_api::list_files(&self.config, Some(dir_path), depth)
             .await
             .map_err(convert_toolbox_error)?;
         Ok(files)
@@ -149,9 +162,8 @@ impl FileSystemService {
         local_path: &std::path::Path,
     ) -> Result<Vec<u8>, DaytonaError> {
         let data = self.download_file(remote_path).await?;
-        std::fs::write(local_path, &data).map_err(|e| {
-            DaytonaError::general(format!("failed to write file: {}", e))
-        })?;
+        std::fs::write(local_path, &data)
+            .map_err(|e| DaytonaError::general(format!("failed to write file: {}", e)))?;
         Ok(data)
     }
 
@@ -238,7 +250,7 @@ impl FileSystemService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{body_string_contains, method, path};
+    use wiremock::matchers::{body_string_contains, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn fs_service(mock_server: &MockServer) -> FileSystemService {
@@ -277,8 +289,8 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/files"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
-                {"name": "file1.txt", "isDir": false, "size": 100, "modTime": "", "mode": "0644", "owner": "user", "group": "user", "permissions": "rw-r--r--"},
-                {"name": "subdir", "isDir": true, "size": 0, "modTime": "", "mode": "0755", "owner": "user", "group": "user", "permissions": "rwxr-xr-x"}
+                {"name": "file1.txt", "isDir": false, "size": 100, "modTime": "", "modifiedAt": "", "mode": "0644", "owner": "user", "group": "user", "permissions": "rw-r--r--"},
+                {"name": "subdir", "isDir": true, "size": 0, "modTime": "", "modifiedAt": "", "mode": "0755", "owner": "user", "group": "user", "permissions": "rwxr-xr-x"}
             ])))
             .mount(&mock_server)
             .await;
@@ -286,6 +298,37 @@ mod tests {
         let svc = fs_service(&mock_server).await;
         let files = svc.list_files("/home/daytona").await.unwrap();
         assert_eq!(files.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_list_files_with_depth() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/files"))
+            .and(query_param("path", "/home/daytona"))
+            .and(query_param("depth", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&mock_server)
+            .await;
+
+        let svc = fs_service(&mock_server).await;
+        let files = svc
+            .list_files_with_depth("/home/daytona", Some(2))
+            .await
+            .unwrap();
+        assert!(files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_files_rejects_invalid_depth() {
+        let mock_server = MockServer::start().await;
+        let svc = fs_service(&mock_server).await;
+        let error = svc
+            .list_files_with_depth("/home/daytona", Some(0))
+            .await
+            .unwrap_err();
+        assert!(error.message().contains("depth must be at least 1"));
     }
 
     #[tokio::test]
@@ -300,6 +343,7 @@ mod tests {
                     "isDir": false,
                     "size": 72057594021171200_i64,
                     "modTime": "",
+                    "modifiedAt": "",
                     "mode": "0666",
                     "owner": "root",
                     "group": "root",
@@ -344,9 +388,7 @@ mod tests {
             .await;
 
         let svc = fs_service(&mock_server).await;
-        svc.delete_file("/home/daytona/mydir", true)
-            .await
-            .unwrap();
+        svc.delete_file("/home/daytona/mydir", true).await.unwrap();
     }
 
     #[tokio::test]
@@ -407,10 +449,7 @@ mod tests {
         let file_content = b"Hello, Daytona!";
         Mock::given(method("GET"))
             .and(path("/files/download"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_bytes(file_content.to_vec()),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(file_content.to_vec()))
             .mount(&mock_server)
             .await;
 
@@ -426,10 +465,7 @@ mod tests {
         let file_content = b"Hello, Daytona!";
         Mock::given(method("GET"))
             .and(path("/files/download"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_bytes(file_content.to_vec()),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(file_content.to_vec()))
             .mount(&mock_server)
             .await;
 

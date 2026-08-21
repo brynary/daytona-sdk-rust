@@ -25,7 +25,8 @@ pub enum RunnerState {
     Decommissioned,
     #[serde(rename = "unresponsive")]
     Unresponsive,
-
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl std::fmt::Display for RunnerState {
@@ -36,6 +37,7 @@ impl std::fmt::Display for RunnerState {
             Self::Disabled => write!(f, "disabled"),
             Self::Decommissioned => write!(f, "decommissioned"),
             Self::Unresponsive => write!(f, "unresponsive"),
+            Self::UnknownDefaultOpenApi => write!(f, "unknown_default_open_api"),
         }
     }
 }
@@ -45,4 +47,3 @@ impl Default for RunnerState {
         Self::Initializing
     }
 }
-

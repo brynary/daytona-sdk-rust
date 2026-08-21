@@ -37,7 +37,15 @@ pub struct SshAccessDto {
 }
 
 impl SshAccessDto {
-    pub fn new(id: String, sandbox_id: String, token: String, expires_at: String, created_at: String, updated_at: String, ssh_command: String) -> SshAccessDto {
+    pub fn new(
+        id: String,
+        sandbox_id: String,
+        token: String,
+        expires_at: String,
+        created_at: String,
+        updated_at: String,
+        ssh_command: String,
+    ) -> SshAccessDto {
         SshAccessDto {
             id,
             sandbox_id,
@@ -49,4 +57,3 @@ impl SshAccessDto {
         }
     }
 }
-

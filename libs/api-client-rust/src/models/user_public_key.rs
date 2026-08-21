@@ -23,10 +23,6 @@ pub struct UserPublicKey {
 
 impl UserPublicKey {
     pub fn new(key: String, name: String) -> UserPublicKey {
-        UserPublicKey {
-            key,
-            name,
-        }
+        UserPublicKey { key, name }
     }
 }
-

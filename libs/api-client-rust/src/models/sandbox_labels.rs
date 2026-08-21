@@ -20,9 +20,6 @@ pub struct SandboxLabels {
 
 impl SandboxLabels {
     pub fn new(labels: std::collections::HashMap<String, String>) -> SandboxLabels {
-        SandboxLabels {
-            labels,
-        }
+        SandboxLabels { labels }
     }
 }
-

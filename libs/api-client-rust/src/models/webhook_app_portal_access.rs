@@ -13,16 +13,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WebhookAppPortalAccess {
+    /// The authentication token for the Svix consumer app portal
+    #[serde(rename = "token")]
+    pub token: String,
     /// The URL to the webhook app portal
     #[serde(rename = "url")]
     pub url: String,
 }
 
 impl WebhookAppPortalAccess {
-    pub fn new(url: String) -> WebhookAppPortalAccess {
-        WebhookAppPortalAccess {
-            url,
-        }
+    pub fn new(token: String, url: String) -> WebhookAppPortalAccess {
+        WebhookAppPortalAccess { token, url }
     }
 }
-

@@ -18,12 +18,26 @@ if [ ! -f src/lib.rs ]; then
   exit 0
 fi
 
+if [ -f src/models/file_info.rs ]; then
+  sed -i.bak 's/pub size: i32/pub size: i64/; s/size: i32,/size: i64,/' src/models/file_info.rs
+  rm src/models/file_info.rs.bak
+fi
+
+for response_model in api_key_list api_key_response organization_role; do
+  response_file="src/models/${response_model}.rs"
+  if [ -f "$response_file" ]; then
+    sed -i.bak 's/#\[serde(rename = "unknown_default_open_api")\]/#[serde(other)]/' "$response_file"
+    rm "${response_file}.bak"
+  fi
+done
+
 # Add module-level clippy allows to lib.rs if not already present
 if ! grep -q "clippy::all" src/lib.rs; then
   HEADER='#![allow(clippy::all)]
 #![allow(clippy::pedantic)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
+#![allow(non_camel_case_types)]
 '
   TEMP=$(mktemp)
   echo "$HEADER" > "$TEMP"

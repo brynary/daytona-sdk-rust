@@ -13,42 +13,57 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CreateUser {
-    #[serde(rename = "id")]
-    pub id: String,
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(rename = "name")]
     pub name: String,
     #[serde(rename = "email", skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(rename = "personalOrganizationQuota", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "personalOrganizationQuota",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub personal_organization_quota: Option<Box<models::CreateOrganizationQuota>>,
-    #[serde(rename = "personalOrganizationDefaultRegionId", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "personalOrganizationDefaultRegionId",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub personal_organization_default_region_id: Option<String>,
     #[serde(rename = "role", skip_serializing_if = "Option::is_none")]
     pub role: Option<Role>,
     #[serde(rename = "emailVerified", skip_serializing_if = "Option::is_none")]
     pub email_verified: Option<bool>,
+    /// Provenance of the email verification. Defaults to auth0 when emailVerified is true and unset.
+    #[serde(
+        rename = "emailVerifiedSource",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub email_verified_source: Option<EmailVerifiedSource>,
 }
 
 impl CreateUser {
-    pub fn new(id: String, name: String) -> CreateUser {
+    pub fn new(name: String) -> CreateUser {
         CreateUser {
-            id,
+            id: None,
             name,
             email: None,
             personal_organization_quota: None,
             personal_organization_default_region_id: None,
             role: None,
             email_verified: None,
+            email_verified_source: None,
         }
     }
 }
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Role {
     #[serde(rename = "admin")]
     Admin,
     #[serde(rename = "user")]
     User,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
 }
 
 impl Default for Role {
@@ -56,4 +71,21 @@ impl Default for Role {
         Self::Admin
     }
 }
+/// Provenance of the email verification. Defaults to auth0 when emailVerified is true and unset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum EmailVerifiedSource {
+    #[serde(rename = "auth0")]
+    Auth0,
+    #[serde(rename = "admin")]
+    Admin,
+    #[serde(rename = "sso")]
+    Sso,
+    #[serde(rename = "unknown_default_open_api")]
+    UnknownDefaultOpenApi,
+}
 
+impl Default for EmailVerifiedSource {
+    fn default() -> EmailVerifiedSource {
+        Self::Auth0
+    }
+}

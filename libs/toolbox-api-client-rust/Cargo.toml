@@ -2,9 +2,8 @@
 name = "daytona-toolbox-client"
 version = "0.1.0"
 authors = ["OpenAPI Generator team and contributors"]
-description = "Daytona Toolbox API"
-# Override this license by providing a License Object in the OpenAPI.
-license = "Unlicense"
+description = "Daytona Toolbox API. The base URL comes from the sandbox's `toolboxProxyUrl` field (returned in sandbox DTO by the main Daytona API) plus the sandbox ID: `{toolboxProxyUrl}/{sandboxId}/{endpoint}`. Default for Daytona Cloud: `https://proxy.app.daytona.io/toolbox/{sandboxId}`."
+license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
@@ -12,11 +11,12 @@ serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0"
 serde_repr = "^0.1"
 url = "^2.5"
-reqwest = { version = "^0.13", features = ["json", "multipart"] }
-reqwest-middleware = { version = "^0.5", features = ["json", "multipart", "form", "query"] }
+tokio = { version = "^1.46.0", features = ["fs"] }
+tokio-util = { version = "^0.7", features = ["codec"] }
+reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "stream", "query", "form"] }
+reqwest-middleware = { version = "^0.5", features = ["json", "multipart", "query", "form"] }
 
-[lints.rust]
-warnings = "allow"
-
-[lints.clippy]
-all = "allow"
+[features]
+default = ["native-tls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]

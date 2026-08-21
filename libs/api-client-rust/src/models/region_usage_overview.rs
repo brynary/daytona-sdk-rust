@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 pub struct RegionUsageOverview {
     #[serde(rename = "regionId")]
     pub region_id: String,
+    #[serde(rename = "sandboxClass")]
+    pub sandbox_class: models::SandboxClass,
     #[serde(rename = "totalCpuQuota")]
     pub total_cpu_quota: f64,
     #[serde(rename = "currentCpuUsage")]
@@ -27,19 +29,76 @@ pub struct RegionUsageOverview {
     pub total_disk_quota: f64,
     #[serde(rename = "currentDiskUsage")]
     pub current_disk_usage: f64,
+    #[serde(rename = "totalGpuQuota")]
+    pub total_gpu_quota: f64,
+    #[serde(rename = "currentGpuUsage")]
+    pub current_gpu_usage: f64,
+    #[serde(rename = "allowedGpuTypes", skip_serializing_if = "Option::is_none")]
+    pub allowed_gpu_types: Option<Vec<models::GpuType>>,
+    #[serde(rename = "maxCpuPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxMemoryPerSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_memory_per_sandbox: Option<f64>,
+    #[serde(rename = "maxDiskPerSandbox", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_sandbox: Option<f64>,
+    #[serde(
+        rename = "maxDiskPerNonEphemeralSandbox",
+        deserialize_with = "Option::deserialize"
+    )]
+    pub max_disk_per_non_ephemeral_sandbox: Option<f64>,
+    /// CPU maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxCpuPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_cpu_per_gpu: Option<f64>,
+    /// Memory maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxMemoryPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_memory_per_gpu: Option<f64>,
+    /// Disk maximum per requested GPU unit for GPU sandboxes.
+    #[serde(rename = "maxDiskPerGpu", deserialize_with = "Option::deserialize")]
+    pub max_disk_per_gpu: Option<f64>,
 }
 
 impl RegionUsageOverview {
-    pub fn new(region_id: String, total_cpu_quota: f64, current_cpu_usage: f64, total_memory_quota: f64, current_memory_usage: f64, total_disk_quota: f64, current_disk_usage: f64) -> RegionUsageOverview {
+    pub fn new(
+        region_id: String,
+        sandbox_class: models::SandboxClass,
+        total_cpu_quota: f64,
+        current_cpu_usage: f64,
+        total_memory_quota: f64,
+        current_memory_usage: f64,
+        total_disk_quota: f64,
+        current_disk_usage: f64,
+        total_gpu_quota: f64,
+        current_gpu_usage: f64,
+        max_cpu_per_sandbox: Option<f64>,
+        max_memory_per_sandbox: Option<f64>,
+        max_disk_per_sandbox: Option<f64>,
+        max_disk_per_non_ephemeral_sandbox: Option<f64>,
+        max_cpu_per_gpu: Option<f64>,
+        max_memory_per_gpu: Option<f64>,
+        max_disk_per_gpu: Option<f64>,
+    ) -> RegionUsageOverview {
         RegionUsageOverview {
             region_id,
+            sandbox_class,
             total_cpu_quota,
             current_cpu_usage,
             total_memory_quota,
             current_memory_usage,
             total_disk_quota,
             current_disk_usage,
+            total_gpu_quota,
+            current_gpu_usage,
+            allowed_gpu_types: None,
+            max_cpu_per_sandbox,
+            max_memory_per_sandbox,
+            max_disk_per_sandbox,
+            max_disk_per_non_ephemeral_sandbox,
+            max_cpu_per_gpu,
+            max_memory_per_gpu,
+            max_disk_per_gpu,
         }
     }
 }
-
