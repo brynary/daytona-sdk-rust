@@ -90,6 +90,26 @@ async fn test_create_and_delete_sandbox() {
 }
 
 #[tokio::test]
+async fn test_refresh_activity() {
+    let client = create_client().await;
+
+    let sandbox = client
+        .create(ubuntu_image_params(), create_options())
+        .await
+        .expect("create sandbox");
+
+    // Regression: the API rejects a literal `null` body with 400
+    // "Invalid JSON in request body"; refresh_activity must send an
+    // empty object instead.
+    sandbox
+        .refresh_activity()
+        .await
+        .expect("refresh activity");
+
+    sandbox.delete().await.expect("delete sandbox");
+}
+
+#[tokio::test]
 async fn test_get_sandbox() {
     let client = create_client().await;
 
