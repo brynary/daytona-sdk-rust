@@ -242,9 +242,17 @@ impl Sandbox {
     /// auto-archive, auto-delete). Useful for keeping long-running sessions alive
     /// while there is still user activity.
     pub async fn refresh_activity(&self) -> Result<(), DaytonaError> {
-        sandbox_api::update_last_activity(&self.api_config, &self.id, self.org_id.as_deref(), None)
-            .await
-            .map_err(convert_api_error)?;
+        // The generated client serializes an omitted optional body as a
+        // literal `null`, which the API rejects with 400 "Invalid JSON in
+        // request body"; send an empty UpdateLastActivity (`{}`) instead.
+        sandbox_api::update_last_activity(
+            &self.api_config,
+            &self.id,
+            self.org_id.as_deref(),
+            Some(models::UpdateLastActivity::new()),
+        )
+        .await
+        .map_err(convert_api_error)?;
         Ok(())
     }
 
