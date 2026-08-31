@@ -123,17 +123,91 @@ impl SnapshotService {
         Ok(snapshot)
     }
 
-    /// Delete a snapshot.
+    /// Delete a snapshot by ID or name.
+    ///
+    /// The delete endpoint is ID-only; names are resolved through
+    /// [`SnapshotService::get`] first, using the same UUID-shape shortcut
+    /// as [`SnapshotService::activate`].
     pub async fn delete(&self, snapshot_id_or_name: &str) -> Result<(), DaytonaError> {
-        snapshots_api::remove_snapshot(
-            &self.api_config,
-            snapshot_id_or_name,
-            self.org_id.as_deref(),
-        )
-        .await
-        .map_err(convert_api_error)?;
+        if is_uuid(snapshot_id_or_name) {
+            match self.delete_by_id(snapshot_id_or_name).await {
+                // A snapshot *name* may itself be UUID-shaped; only a
+                // NotFound falls through to name resolution.
+                Err(DaytonaError::NotFound { .. }) => {}
+                other => return other,
+            }
+        }
+        let resolved = self.get(snapshot_id_or_name).await?;
+        self.delete_by_id(&resolved.id).await
+    }
+
+    async fn delete_by_id(&self, snapshot_id: &str) -> Result<(), DaytonaError> {
+        snapshots_api::remove_snapshot(&self.api_config, snapshot_id, self.org_id.as_deref())
+            .await
+            .map_err(convert_api_error)?;
         Ok(())
     }
+
+    /// Activate an inactive snapshot by ID or name, returning the updated
+    /// snapshot.
+    ///
+    /// Matches TS `SnapshotService.activate` / Go `Activate`: the endpoint
+    /// is ID-only, so a UUID-shaped identifier is tried directly (falling
+    /// back to name resolution only on NotFound, since names may be
+    /// UUID-shaped), and any other identifier resolves through
+    /// [`SnapshotService::get`] first — keeping the common case at one
+    /// round trip.
+    pub async fn activate(
+        &self,
+        snapshot_id_or_name: &str,
+    ) -> Result<daytona_api_client::models::SnapshotDto, DaytonaError> {
+        if is_uuid(snapshot_id_or_name) {
+            match self.activate_by_id(snapshot_id_or_name).await {
+                Err(DaytonaError::NotFound { .. }) => {}
+                other => return other,
+            }
+        }
+        let resolved = self.get(snapshot_id_or_name).await?;
+        self.activate_by_id(&resolved.id).await
+    }
+
+    async fn activate_by_id(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<daytona_api_client::models::SnapshotDto, DaytonaError> {
+        snapshots_api::activate_snapshot(&self.api_config, snapshot_id, self.org_id.as_deref())
+            .await
+            .map_err(convert_api_error)
+    }
+}
+
+/// RFC 4122 UUID shape — versions 1-5 with variant 8/9/a/b, or the nil
+/// UUID — matching the reference SDKs' UUID_REGEX used to route ID-only
+/// operations.
+fn is_uuid(value: &str) -> bool {
+    if value == "00000000-0000-0000-0000-000000000000" {
+        return true;
+    }
+    let bytes = value.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+    for (index, byte) in bytes.iter().enumerate() {
+        match index {
+            8 | 13 | 18 | 23 => {
+                if *byte != b'-' {
+                    return false;
+                }
+            }
+            _ => {
+                if !byte.is_ascii_hexdigit() {
+                    return false;
+                }
+            }
+        }
+    }
+    matches!(bytes[14].to_ascii_lowercase(), b'1'..=b'5')
+        && matches!(bytes[19].to_ascii_lowercase(), b'8' | b'9' | b'a' | b'b')
 }
 
 #[cfg(test)]
@@ -230,17 +304,117 @@ mod tests {
         assert!(matches!(err, DaytonaError::NotFound { .. }));
     }
 
+    fn snapshot_json(id: &str, name: &str, state: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "name": name, "state": state, "general": true,
+            "cpu": 2.0, "gpu": 0.0, "mem": 4.0, "disk": 20.0,
+            "size": null, "entrypoint": null, "errorReason": null,
+            "lastUsedAt": null, "createdAt": "2024-01-01",
+            "updatedAt": "2024-01-01", "sourceSandboxId": null
+        })
+    }
+
+    const SNAP_UUID: &str = "0195b0a1-7a3d-4bcd-8f12-3456789abcde";
+
     #[tokio::test]
-    async fn test_delete_snapshot() {
+    async fn test_delete_snapshot_resolves_name_first() {
         let mock_server = MockServer::start().await;
 
-        Mock::given(method("DELETE"))
+        // "snap-1" is not UUID-shaped, so delete resolves it through GET
+        // before calling the ID-only delete endpoint.
+        Mock::given(method("GET"))
             .and(path("/snapshots/snap-1"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(snapshot_json(SNAP_UUID, "snap-1", "active")),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("DELETE"))
+            .and(path(format!("/snapshots/{SNAP_UUID}")))
             .respond_with(ResponseTemplate::new(200))
             .mount(&mock_server)
             .await;
 
         let svc = snapshot_service(&mock_server).await;
         svc.delete("snap-1").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_activate_snapshot_by_uuid_is_one_round_trip() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path(format!("/snapshots/{SNAP_UUID}/activate")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(snapshot_json(
+                SNAP_UUID,
+                "cached-env",
+                "active",
+            )))
+            .mount(&mock_server)
+            .await;
+
+        let svc = snapshot_service(&mock_server).await;
+        let snapshot = svc.activate(SNAP_UUID).await.unwrap();
+        assert_eq!(snapshot.id, SNAP_UUID);
+        assert_eq!(
+            snapshot.state,
+            daytona_api_client::models::SnapshotState::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn test_activate_snapshot_resolves_uuid_shaped_name_on_not_found() {
+        let mock_server = MockServer::start().await;
+        // A *name* that happens to be UUID-shaped: the direct ID attempt
+        // 404s, then resolution through GET finds the real ID.
+        let uuid_shaped_name = "11111111-2222-3333-8444-555555555555";
+
+        Mock::given(method("POST"))
+            .and(path(format!("/snapshots/{uuid_shaped_name}/activate")))
+            .respond_with(
+                ResponseTemplate::new(404)
+                    .set_body_json(serde_json::json!({"message": "snapshot not found"})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path(format!("/snapshots/{uuid_shaped_name}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(snapshot_json(
+                SNAP_UUID,
+                uuid_shaped_name,
+                "inactive",
+            )))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path(format!("/snapshots/{SNAP_UUID}/activate")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(snapshot_json(
+                SNAP_UUID,
+                uuid_shaped_name,
+                "active",
+            )))
+            .mount(&mock_server)
+            .await;
+
+        let svc = snapshot_service(&mock_server).await;
+        let snapshot = svc.activate(uuid_shaped_name).await.unwrap();
+        assert_eq!(snapshot.id, SNAP_UUID);
+    }
+
+    #[test]
+    fn test_is_uuid_matches_the_reference_regex() {
+        assert!(is_uuid("0195b0a1-7a3d-4bcd-8f12-3456789abcde"));
+        assert!(is_uuid("0195B0A1-7A3D-4BCD-8F12-3456789ABCDE"));
+        assert!(is_uuid("00000000-0000-0000-0000-000000000000"));
+        // Version 3 is a name-based UUID: verify the version nibble range.
+        assert!(is_uuid("11111111-2222-3333-8444-555555555555"));
+        assert!(!is_uuid("snap-1"));
+        assert!(!is_uuid("0195b0a1-7a3d-0bcd-8f12-3456789abcde")); // version 0
+        assert!(!is_uuid("0195b0a1-7a3d-4bcd-0f12-3456789abcde")); // bad variant
+        assert!(!is_uuid("0195b0a17a3d4bcd8f123456789abcde")); // no dashes
     }
 }

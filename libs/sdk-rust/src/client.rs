@@ -34,6 +34,22 @@ impl Client {
         Self::new_with_config(DaytonaConfig::default()).await
     }
 
+    /// The underlying generated API client configuration.
+    ///
+    /// Rust-specific escape hatch (the reference SDKs keep their generated
+    /// clients internal): lets callers reach `daytona_api_client` endpoints
+    /// the SDK does not wrap without re-deriving authentication from the
+    /// environment. Pair with [`Client::organization_id`] for endpoints
+    /// taking the `X-Daytona-Organization-ID` parameter.
+    pub fn api_configuration(&self) -> &ApiConfiguration {
+        &self.api_config
+    }
+
+    /// The resolved organization id, when one is configured.
+    pub fn organization_id(&self) -> Option<&str> {
+        self.config.organization_id.as_deref()
+    }
+
     /// Create a new client with explicit configuration.
     /// Config fields take precedence over environment variables.
     pub async fn new_with_config(config: DaytonaConfig) -> Result<Self, DaytonaError> {
@@ -545,6 +561,36 @@ fn validate_base_params(base: &crate::types::SandboxBaseParams) -> Result<(), Da
             ));
         }
     }
+    if let Some(interval) = base.auto_pause_interval {
+        if interval < 0 {
+            return Err(DaytonaError::general(
+                "autoPauseInterval must be a non-negative integer",
+            ));
+        }
+    }
+    // At most one of auto-stop and auto-pause may be non-zero (TS/Go check
+    // truthiness, so zero — "disabled" — on either side is fine).
+    if base
+        .auto_stop_interval
+        .is_some_and(|interval| interval != 0)
+        && base
+            .auto_pause_interval
+            .is_some_and(|interval| interval != 0)
+    {
+        return Err(DaytonaError::general(
+            "autoStopInterval and autoPauseInterval are mutually exclusive. \
+             Set at most one of them to a non-zero value",
+        ));
+    }
+    if base
+        .auto_pause_interval
+        .is_some_and(|interval| interval != 0)
+        && (base.ephemeral == Some(true) || base.auto_delete_interval == Some(0))
+    {
+        return Err(DaytonaError::general(
+            "Ephemeral sandboxes cannot have auto-pause enabled. Set autoPauseInterval to 0",
+        ));
+    }
     if let Some(interval) = base.auto_archive_interval {
         if interval < 0 {
             return Err(DaytonaError::general(
@@ -552,6 +598,15 @@ fn validate_base_params(base: &crate::types::SandboxBaseParams) -> Result<(), Da
             ));
         }
     }
+    if let Some(ttl) = base.ttl_minutes {
+        if ttl < 0 {
+            return Err(DaytonaError::general(
+                "ttlMinutes must be a non-negative integer",
+            ));
+        }
+    }
+    // Note: autoDeleteInterval deliberately gets no validation — negative
+    // values legitimately mean "disabled" (matching TS/Go).
     Ok(())
 }
 
@@ -570,7 +625,9 @@ fn apply_base_params(
     // to apply different defaults).
     cs.public = Some(base.public.unwrap_or(false));
     cs.auto_stop_interval = base.auto_stop_interval;
+    cs.auto_pause_interval = base.auto_pause_interval;
     cs.auto_archive_interval = base.auto_archive_interval;
+    cs.ttl_minutes = base.ttl_minutes;
 
     // Handle ephemeral sandboxes: set auto_delete_interval to 0
     if base.ephemeral == Some(true) {
@@ -583,6 +640,10 @@ fn apply_base_params(
     if let Some(allow_list) = &base.network_allow_list {
         cs.network_allow_list = Some(allow_list.join(","));
     }
+    if let Some(domain_list) = &base.domain_allow_list {
+        cs.domain_allow_list = Some(domain_list.join(","));
+    }
+    cs.outbound_proxy_url = base.outbound_proxy_url.clone();
     if let Some(volumes) = &base.volumes {
         let api_volumes: Vec<models::SandboxVolume> = volumes
             .iter()
@@ -1204,5 +1265,77 @@ mod tests {
         let client = Client::new_with_config(config).await.unwrap();
         let err = client.list(None, None, Some(0)).await.unwrap_err();
         assert!(err.message().contains("limit must be a positive integer"));
+    }
+
+    #[test]
+    fn test_validate_base_params_auto_pause_rules() {
+        let mut base = crate::types::SandboxBaseParams {
+            auto_pause_interval: Some(-1),
+            ..Default::default()
+        };
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("autoPauseInterval"));
+
+        // Non-zero auto-stop and auto-pause are mutually exclusive; zero
+        // on either side means "disabled" and is fine.
+        base.auto_pause_interval = Some(30);
+        base.auto_stop_interval = Some(15);
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("mutually exclusive"));
+        base.auto_stop_interval = Some(0);
+        validate_base_params(&base).unwrap();
+
+        // Ephemeral sandboxes cannot auto-pause.
+        base.ephemeral = Some(true);
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("Ephemeral"));
+    }
+
+    #[test]
+    fn test_validate_base_params_ttl_and_auto_delete() {
+        let base = crate::types::SandboxBaseParams {
+            ttl_minutes: Some(-1),
+            ..Default::default()
+        };
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("ttlMinutes"));
+
+        // Negative auto-delete legitimately means "disabled".
+        let base = crate::types::SandboxBaseParams {
+            auto_delete_interval: Some(-1),
+            ..Default::default()
+        };
+        validate_base_params(&base).unwrap();
+    }
+
+    #[test]
+    fn test_apply_base_params_maps_new_fields() {
+        let base = crate::types::SandboxBaseParams {
+            auto_pause_interval: Some(60),
+            ttl_minutes: Some(240),
+            domain_allow_list: Some(vec![
+                "example.com".to_string(),
+                "*.daytona.io".to_string(),
+            ]),
+            outbound_proxy_url: Some("http://proxy:3128".to_string()),
+            ..Default::default()
+        };
+        let resolved = crate::config::ResolvedConfig {
+            api_key: Some("k".to_string()),
+            jwt_token: None,
+            organization_id: None,
+            api_url: "https://example".to_string(),
+            target: None,
+            http_client: None,
+        };
+        let mut cs = models::CreateSandbox::new();
+        apply_base_params(&mut cs, &base, &resolved);
+        assert_eq!(cs.auto_pause_interval, Some(60));
+        assert_eq!(cs.ttl_minutes, Some(240));
+        assert_eq!(
+            cs.domain_allow_list.as_deref(),
+            Some("example.com,*.daytona.io")
+        );
+        assert_eq!(cs.outbound_proxy_url.as_deref(), Some("http://proxy:3128"));
     }
 }
