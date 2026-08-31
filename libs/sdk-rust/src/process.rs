@@ -49,6 +49,7 @@ pub struct SessionCommandLogsResult {
 /// Service for executing commands and managing sessions in a sandbox.
 pub struct ProcessService {
     pub(crate) config: ToolboxConfig,
+    pub(crate) websocket_headers: reqwest::header::HeaderMap,
 }
 
 impl ProcessService {
@@ -255,6 +256,47 @@ impl ProcessService {
         &self,
         session_id: &str,
         command_id: &str,
+        on_stdout: FOut,
+        on_stderr: FErr,
+    ) -> Result<(), DaytonaError>
+    where
+        FOut: FnMut(String) -> FutOut + Send,
+        FErr: FnMut(String) -> FutErr + Send,
+        FutOut: Future<Output = Result<(), DaytonaError>> + Send,
+        FutErr: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        let path = format!(
+            "/process/session/{}/command/{}/logs?follow=true",
+            urlencode(session_id),
+            urlencode(command_id)
+        );
+        self.stream_logs_path(&path, on_stdout, on_stderr).await
+    }
+
+    /// Stream the sandbox entrypoint logs through separate stdout and
+    /// stderr callbacks.
+    pub async fn get_entrypoint_logs_stream<FOut, FErr, FutOut, FutErr>(
+        &self,
+        on_stdout: FOut,
+        on_stderr: FErr,
+    ) -> Result<(), DaytonaError>
+    where
+        FOut: FnMut(String) -> FutOut + Send,
+        FErr: FnMut(String) -> FutErr + Send,
+        FutOut: Future<Output = Result<(), DaytonaError>> + Send,
+        FutErr: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        self.stream_logs_path(
+            "/process/session/entrypoint/logs?follow=true",
+            on_stdout,
+            on_stderr,
+        )
+        .await
+    }
+
+    async fn stream_logs_path<FOut, FErr, FutOut, FutErr>(
+        &self,
+        path: &str,
         mut on_stdout: FOut,
         mut on_stderr: FErr,
     ) -> Result<(), DaytonaError>
@@ -266,12 +308,7 @@ impl ProcessService {
     {
         ensure_rustls_crypto_provider();
 
-        let path = format!(
-            "/process/session/{}/command/{}/logs?follow=true",
-            urlencode(session_id),
-            urlencode(command_id)
-        );
-        let ws_url = build_ws_url(&self.config.base_path, &path)?;
+        let ws_url = build_ws_url(&self.config.base_path, path)?;
         let mut request = tungstenite::http::Request::builder()
             .uri(&ws_url)
             .header("Host", extract_host(&ws_url))
@@ -293,9 +330,10 @@ impl ProcessService {
             request = request.header(reqwest::header::USER_AGENT.as_str(), user_agent);
         }
 
-        let request = request.body(()).map_err(|e| {
+        let mut request = request.body(()).map_err(|e| {
             DaytonaError::general(format!("failed to build log stream request: {e}"))
         })?;
+        request.headers_mut().extend(self.websocket_headers.clone());
 
         let (ws_stream, _) = tokio_tungstenite::connect_async(request)
             .await
@@ -337,6 +375,77 @@ impl ProcessService {
         }
 
         Ok(())
+    }
+
+    /// Send input to a running interactive session command.
+    ///
+    /// The data is a plain UTF-8 string over an HTTP POST (the endpoint
+    /// returns 204) — deliberately not a byte channel, matching the
+    /// TypeScript SDK's `sendSessionCommandInput` (absent from Go).
+    /// Stdin travels separately from the log WebSocket: start the command
+    /// with `run_async` (and typically `suppress_input_echo`), stream
+    /// logs with [`ProcessService::get_session_command_logs_stream`], and
+    /// feed input through this method.
+    pub async fn send_session_command_input(
+        &self,
+        session_id: &str,
+        command_id: &str,
+        data: &str,
+    ) -> Result<(), DaytonaError> {
+        let req = daytona_toolbox_client::models::SessionSendInputRequest {
+            data: data.to_string(),
+        };
+        process_api::send_input(&self.config, session_id, command_id, req)
+            .await
+            .map_err(convert_toolbox_error)?;
+        Ok(())
+    }
+
+    /// Create a PTY and connect to it over a single WebSocket, returning
+    /// a live [`crate::PtyHandle`].
+    ///
+    /// Uses the daemon's `create-connect` endpoint like the TypeScript
+    /// SDK (which never uses the REST create for interactive PTYs).
+    /// Size defaults to 80x24; environment variables ride a WebSocket
+    /// subprotocol token. The connection handshake is awaited before
+    /// returning, matching TypeScript (Go returns immediately and makes
+    /// the caller wait).
+    pub async fn create_pty(
+        &self,
+        id: &str,
+        options: crate::types::PtyCreateOptions,
+    ) -> Result<crate::PtyHandle, DaytonaError> {
+        let cols = options.size.as_ref().map_or(80, |size| size.cols);
+        let rows = options.size.as_ref().map_or(24, |size| size.rows);
+        let mut path = format!(
+            "/process/pty/create-connect?id={}&cols={cols}&rows={rows}",
+            urlencode(id)
+        );
+        if let Some(cwd) = &options.cwd {
+            path.push_str(&format!("&cwd={}", urlencode(cwd)));
+        }
+        crate::PtyHandle::connect(
+            self.config.clone(),
+            self.websocket_headers.clone(),
+            id.to_string(),
+            &path,
+            options.envs.as_ref(),
+        )
+        .await
+    }
+
+    /// Connect to an existing PTY session, returning a live
+    /// [`crate::PtyHandle`]. Awaits the connection handshake.
+    pub async fn connect_pty(&self, session_id: &str) -> Result<crate::PtyHandle, DaytonaError> {
+        let path = format!("/process/pty/{}/connect", urlencode(session_id));
+        crate::PtyHandle::connect(
+            self.config.clone(),
+            self.websocket_headers.clone(),
+            session_id.to_string(),
+            &path,
+            None,
+        )
+        .await
     }
 
     /// Create a PTY session.
@@ -589,7 +698,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// Convert an HTTP(S) base URL to a WebSocket URL with the given path.
-fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
+pub(crate) fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
     let full = format!("{base_url}{path}");
     let url =
         url::Url::parse(&full).map_err(|e| DaytonaError::general(format!("invalid URL: {e}")))?;
@@ -610,7 +719,7 @@ fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
 }
 
 /// Extract the host (with port) from a URL string for the Host header.
-fn extract_host(url: &str) -> String {
+pub(crate) fn extract_host(url: &str) -> String {
     url::Url::parse(url)
         .ok()
         .and_then(|u| {
@@ -625,7 +734,7 @@ fn extract_host(url: &str) -> String {
         .unwrap_or_default()
 }
 
-fn ensure_rustls_crypto_provider() {
+pub(crate) fn ensure_rustls_crypto_provider() {
     RUSTLS_PROVIDER.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
@@ -654,7 +763,10 @@ mod tests {
             bearer_access_token: Some("test-token".to_string()),
             api_key: None,
         };
-        ProcessService { config }
+        ProcessService {
+            config,
+            websocket_headers: reqwest::header::HeaderMap::new(),
+        }
     }
 
     #[tokio::test]
@@ -927,6 +1039,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::result_large_err)] // Required by tungstenite's handshake callback type.
     async fn test_get_session_command_logs_stream_demuxes_websocket() {
         use futures_util::SinkExt;
         use tokio::net::TcpListener;
@@ -935,7 +1048,16 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(
+                stream,
+                |request: &tungstenite::handshake::server::Request,
+                 response: tungstenite::handshake::server::Response| {
+                    assert_eq!(request.headers()["X-Daytona-Organization-ID"], "org-1");
+                    Ok(response)
+                },
+            )
+            .await
+            .unwrap();
             ws.send(tungstenite::Message::Binary(
                 [STDOUT_PREFIX_BYTES, b"hello "].concat().into(),
             ))
@@ -961,7 +1083,15 @@ mod tests {
             bearer_access_token: None,
             api_key: None,
         };
-        let svc = ProcessService { config };
+        let mut websocket_headers = reqwest::header::HeaderMap::new();
+        websocket_headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_static("org-1"),
+        );
+        let svc = ProcessService {
+            config,
+            websocket_headers,
+        };
         let stdout = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
         let stderr = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
 
@@ -995,6 +1125,23 @@ mod tests {
         server.await.unwrap();
         assert_eq!(&*stdout.lock().await, "hello world\n");
         assert_eq!(&*stderr.lock().await, "err\n");
+    }
+
+    #[tokio::test]
+    async fn test_send_session_command_input() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/process/session/sess-1/command/cmd-1/input"))
+            .and(body_json(serde_json::json!({"data": "y\n"})))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let svc = process_service(&mock_server).await;
+        svc.send_session_command_input("sess-1", "cmd-1", "y\n")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

@@ -58,18 +58,44 @@ pub struct SandboxBaseParams {
     pub labels: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public: Option<bool>,
+    /// Per-create target (region). Overrides the client default when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<i32>,
+    /// Minutes of inactivity before the sandbox is auto-paused; 0 disables.
+    /// Only supported on sandbox classes that support pausing, and mutually
+    /// exclusive with a non-zero `auto_stop_interval` (matching TS/Go SDK
+    /// validation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_pause_interval: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_archive_interval: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_delete_interval: Option<i32>,
+    /// Wall-clock lifetime in minutes from creation, counted regardless of
+    /// state; 0 disables (subject to the org/region maximum lifespan).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_minutes: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<VolumeMount>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_block_all: Option<bool>,
+    /// Allowed CIDR network addresses; serialized as the API's
+    /// comma-separated string.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_allow_list: Option<Vec<String>>,
+    /// Allowed domains (wildcards like `*.example.com` supported);
+    /// serialized as the API's comma-separated string. A separate field
+    /// from the CIDR allow list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_allow_list: Option<Vec<String>>,
+    /// Outbound proxy URL applied at creation via the standard HTTP(S)_PROXY
+    /// environment variables. Convenience routing, not a security boundary
+    /// on its own — combine with `domain_allow_list` for network-layer
+    /// enforcement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outbound_proxy_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ephemeral: Option<bool>,
 }
@@ -301,6 +327,12 @@ pub struct SnapshotGeneral {
 pub struct CreateSnapshotParams {
     pub name: String,
     pub image: ImageSource,
+    /// Region in which to build the snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_id: Option<String>,
+    /// Class of sandboxes that can be created from this snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<daytona_api_client::models::SandboxClass>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<Resources>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -384,6 +416,25 @@ pub struct InterpreterContext {
 pub struct PtySessionOptions {
     pub size: Option<PtySize>,
     pub env: Option<HashMap<String, String>>,
+}
+
+/// Options for creating an interactive PTY over the `create-connect`
+/// WebSocket ([`crate::ProcessService::create_pty`]).
+///
+/// Matches the TypeScript SDK's `PtyCreateOptions` (which additionally has
+/// `cwd`, absent from Go's `CreatePty`). Size defaults to 80x24 when unset.
+#[derive(Debug, Clone, Default)]
+pub struct PtyCreateOptions {
+    pub cwd: Option<String>,
+    pub envs: Option<HashMap<String, String>>,
+    pub size: Option<PtySize>,
+}
+
+/// Terminal outcome of a PTY session, from [`crate::PtyHandle::wait`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PtyResult {
+    pub exit_code: Option<i32>,
+    pub error: Option<String>,
 }
 
 /// Display information from computer use.
