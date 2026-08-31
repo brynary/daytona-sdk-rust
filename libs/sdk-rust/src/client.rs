@@ -667,7 +667,7 @@ fn apply_base_params(
             .collect();
         cs.volumes = Some(api_volumes);
     }
-    cs.target = config.target.clone();
+    cs.target = base.target.clone().or_else(|| config.target.clone());
 }
 
 /// Convert a generated API client error to a DaytonaError.
@@ -1342,10 +1342,8 @@ mod tests {
         let base = crate::types::SandboxBaseParams {
             auto_pause_interval: Some(60),
             ttl_minutes: Some(240),
-            domain_allow_list: Some(vec![
-                "example.com".to_string(),
-                "*.daytona.io".to_string(),
-            ]),
+            target: Some("eu".to_string()),
+            domain_allow_list: Some(vec!["example.com".to_string(), "*.daytona.io".to_string()]),
             outbound_proxy_url: Some("http://proxy:3128".to_string()),
             ..Default::default()
         };
@@ -1354,7 +1352,7 @@ mod tests {
             jwt_token: None,
             organization_id: None,
             api_url: "https://example".to_string(),
-            target: None,
+            target: Some("us".to_string()),
             http_client: None,
         };
         let mut cs = models::CreateSandbox::new();
@@ -1366,5 +1364,6 @@ mod tests {
             Some("example.com,*.daytona.io")
         );
         assert_eq!(cs.outbound_proxy_url.as_deref(), Some("http://proxy:3128"));
+        assert_eq!(cs.target.as_deref(), Some("eu"));
     }
 }

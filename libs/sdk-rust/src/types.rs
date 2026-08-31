@@ -58,6 +58,9 @@ pub struct SandboxBaseParams {
     pub labels: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public: Option<bool>,
+    /// Per-create target (region). Overrides the client default when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_stop_interval: Option<i32>,
     /// Minutes of inactivity before the sandbox is auto-paused; 0 disables.
