@@ -339,6 +339,69 @@ impl ProcessService {
         Ok(())
     }
 
+    /// Send input to a running interactive session command.
+    ///
+    /// The data is a plain UTF-8 string over an HTTP POST (the endpoint
+    /// returns 204) — deliberately not a byte channel, matching the
+    /// TypeScript SDK's `sendSessionCommandInput` (absent from Go).
+    /// Stdin travels separately from the log WebSocket: start the command
+    /// with `run_async` (and typically `suppress_input_echo`), stream
+    /// logs with [`ProcessService::get_session_command_logs_stream`], and
+    /// feed input through this method.
+    pub async fn send_session_command_input(
+        &self,
+        session_id: &str,
+        command_id: &str,
+        data: &str,
+    ) -> Result<(), DaytonaError> {
+        let req = daytona_toolbox_client::models::SessionSendInputRequest {
+            data: data.to_string(),
+        };
+        process_api::send_input(&self.config, session_id, command_id, req)
+            .await
+            .map_err(convert_toolbox_error)?;
+        Ok(())
+    }
+
+    /// Create a PTY and connect to it over a single WebSocket, returning
+    /// a live [`crate::PtyHandle`].
+    ///
+    /// Uses the daemon's `create-connect` endpoint like the TypeScript
+    /// SDK (which never uses the REST create for interactive PTYs).
+    /// Size defaults to 80x24; environment variables ride a WebSocket
+    /// subprotocol token. The connection handshake is awaited before
+    /// returning, matching TypeScript (Go returns immediately and makes
+    /// the caller wait).
+    pub async fn create_pty(
+        &self,
+        id: &str,
+        options: crate::types::PtyCreateOptions,
+    ) -> Result<crate::PtyHandle, DaytonaError> {
+        let cols = options.size.as_ref().map_or(80, |size| size.cols);
+        let rows = options.size.as_ref().map_or(24, |size| size.rows);
+        let mut path = format!(
+            "/process/pty/create-connect?id={}&cols={cols}&rows={rows}",
+            urlencode(id)
+        );
+        if let Some(cwd) = &options.cwd {
+            path.push_str(&format!("&cwd={}", urlencode(cwd)));
+        }
+        crate::PtyHandle::connect(
+            self.config.clone(),
+            id.to_string(),
+            &path,
+            options.envs.as_ref(),
+        )
+        .await
+    }
+
+    /// Connect to an existing PTY session, returning a live
+    /// [`crate::PtyHandle`]. Awaits the connection handshake.
+    pub async fn connect_pty(&self, session_id: &str) -> Result<crate::PtyHandle, DaytonaError> {
+        let path = format!("/process/pty/{}/connect", urlencode(session_id));
+        crate::PtyHandle::connect(self.config.clone(), session_id.to_string(), &path, None).await
+    }
+
     /// Create a PTY session.
     ///
     /// The `id` parameter allows specifying a custom session identifier, matching
@@ -589,7 +652,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// Convert an HTTP(S) base URL to a WebSocket URL with the given path.
-fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
+pub(crate) fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
     let full = format!("{base_url}{path}");
     let url =
         url::Url::parse(&full).map_err(|e| DaytonaError::general(format!("invalid URL: {e}")))?;
@@ -610,7 +673,7 @@ fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
 }
 
 /// Extract the host (with port) from a URL string for the Host header.
-fn extract_host(url: &str) -> String {
+pub(crate) fn extract_host(url: &str) -> String {
     url::Url::parse(url)
         .ok()
         .and_then(|u| {
@@ -625,7 +688,7 @@ fn extract_host(url: &str) -> String {
         .unwrap_or_default()
 }
 
-fn ensure_rustls_crypto_provider() {
+pub(crate) fn ensure_rustls_crypto_provider() {
     RUSTLS_PROVIDER.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
@@ -995,6 +1058,23 @@ mod tests {
         server.await.unwrap();
         assert_eq!(&*stdout.lock().await, "hello world\n");
         assert_eq!(&*stderr.lock().await, "err\n");
+    }
+
+    #[tokio::test]
+    async fn test_send_session_command_input() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/process/session/sess-1/command/cmd-1/input"))
+            .and(body_json(serde_json::json!({"data": "y\n"})))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let svc = process_service(&mock_server).await;
+        svc.send_session_command_input("sess-1", "cmd-1", "y\n")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
