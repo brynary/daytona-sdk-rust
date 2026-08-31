@@ -56,7 +56,7 @@ pub struct Sandbox {
     pub state: Option<SandboxState>,
     /// The sandbox class (container, linux-vm, android, windows), which
     /// gates class-specific operations like pause and fork.
-    pub sandbox_class: Option<models::SandboxClass>,
+    pub sandbox_class: Option<models::sandbox::SandboxClass>,
     pub error_reason: Option<String>,
     pub recoverable: Option<bool>,
     pub backup_state: Option<models::sandbox::BackupState>,
