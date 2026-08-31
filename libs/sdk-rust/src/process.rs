@@ -308,7 +308,7 @@ impl ProcessService {
     {
         ensure_rustls_crypto_provider();
 
-        let ws_url = build_ws_url(&self.config.base_path, &path)?;
+        let ws_url = build_ws_url(&self.config.base_path, path)?;
         let mut request = tungstenite::http::Request::builder()
             .uri(&ws_url)
             .header("Host", extract_host(&ws_url))
