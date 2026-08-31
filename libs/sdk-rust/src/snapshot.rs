@@ -65,6 +65,8 @@ impl SnapshotService {
         params: &CreateSnapshotParams,
     ) -> Result<daytona_api_client::models::SnapshotDto, DaytonaError> {
         let mut create_req = models::CreateSnapshot::new(params.name.clone());
+        create_req.region_id.clone_from(&params.region_id);
+        create_req.sandbox_class = params.sandbox_class;
 
         // Handle image: string → image_name, DockerImage → build_info
         match &params.image {
@@ -272,7 +274,7 @@ fn is_uuid(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{body_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn snapshot_service(mock_server: &MockServer) -> SnapshotService {
@@ -289,6 +291,42 @@ mod tests {
             api_config: config,
             org_id: None,
         }
+    }
+
+    #[tokio::test]
+    async fn test_create_snapshot_maps_region_and_sandbox_class() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/snapshots"))
+            .and(body_json(serde_json::json!({
+                "name": "vm-snapshot",
+                "imageName": "ubuntu:24.04",
+                "regionId": "eu",
+                "sandboxClass": "linux-vm"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(snapshot_json(
+                SNAP_UUID,
+                "vm-snapshot",
+                "pending",
+            )))
+            .mount(&mock_server)
+            .await;
+
+        let svc = snapshot_service(&mock_server).await;
+        let snapshot = svc
+            .create(&CreateSnapshotParams {
+                name: "vm-snapshot".to_string(),
+                image: ImageSource::Name("ubuntu:24.04".to_string()),
+                region_id: Some("eu".to_string()),
+                sandbox_class: Some(models::SandboxClass::LINUX_VM),
+                resources: None,
+                entrypoint: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.id, SNAP_UUID);
     }
 
     #[tokio::test]

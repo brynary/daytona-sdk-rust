@@ -327,6 +327,12 @@ pub struct SnapshotGeneral {
 pub struct CreateSnapshotParams {
     pub name: String,
     pub image: ImageSource,
+    /// Region in which to build the snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_id: Option<String>,
+    /// Class of sandboxes that can be created from this snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_class: Option<daytona_api_client::models::SandboxClass>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<Resources>,
     #[serde(skip_serializing_if = "Option::is_none")]

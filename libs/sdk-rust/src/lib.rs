@@ -21,7 +21,7 @@ pub use error::DaytonaError;
 pub use sandbox::Sandbox;
 
 // Re-export SandboxState from generated client (matches Go/TS enum usage)
-pub use daytona_api_client::models::SandboxState;
+pub use daytona_api_client::models::{SandboxClass, SandboxState};
 
 // Re-export sandbox-related enums exposed on the Sandbox struct
 pub use daytona_api_client::models::sandbox::BackupState;
