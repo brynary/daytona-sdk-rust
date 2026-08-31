@@ -1,7 +1,10 @@
 # Daytona upstream version
 
 The generated Rust API clients are synchronized with
-[`daytona/clients` v0.205.1](https://github.com/daytona/clients/releases/tag/v0.205.1).
+[`daytona/clients` v0.207.0](https://github.com/daytona/clients/releases/tag/v0.207.0).
+
+The v0.207.0 tag contains the same main and toolbox OpenAPI documents as
+v0.205.1. Regeneration therefore does not change the generated Rust source.
 
 - Main API source: `openapi-specs/api.json`
 - Toolbox API source: `openapi-specs/toolbox.json`
