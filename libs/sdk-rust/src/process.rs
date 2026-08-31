@@ -256,6 +256,47 @@ impl ProcessService {
         &self,
         session_id: &str,
         command_id: &str,
+        on_stdout: FOut,
+        on_stderr: FErr,
+    ) -> Result<(), DaytonaError>
+    where
+        FOut: FnMut(String) -> FutOut + Send,
+        FErr: FnMut(String) -> FutErr + Send,
+        FutOut: Future<Output = Result<(), DaytonaError>> + Send,
+        FutErr: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        let path = format!(
+            "/process/session/{}/command/{}/logs?follow=true",
+            urlencode(session_id),
+            urlencode(command_id)
+        );
+        self.stream_logs_path(&path, on_stdout, on_stderr).await
+    }
+
+    /// Stream the sandbox entrypoint logs through separate stdout and
+    /// stderr callbacks.
+    pub async fn get_entrypoint_logs_stream<FOut, FErr, FutOut, FutErr>(
+        &self,
+        on_stdout: FOut,
+        on_stderr: FErr,
+    ) -> Result<(), DaytonaError>
+    where
+        FOut: FnMut(String) -> FutOut + Send,
+        FErr: FnMut(String) -> FutErr + Send,
+        FutOut: Future<Output = Result<(), DaytonaError>> + Send,
+        FutErr: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        self.stream_logs_path(
+            "/process/session/entrypoint/logs?follow=true",
+            on_stdout,
+            on_stderr,
+        )
+        .await
+    }
+
+    async fn stream_logs_path<FOut, FErr, FutOut, FutErr>(
+        &self,
+        path: &str,
         mut on_stdout: FOut,
         mut on_stderr: FErr,
     ) -> Result<(), DaytonaError>
@@ -267,11 +308,6 @@ impl ProcessService {
     {
         ensure_rustls_crypto_provider();
 
-        let path = format!(
-            "/process/session/{}/command/{}/logs?follow=true",
-            urlencode(session_id),
-            urlencode(command_id)
-        );
         let ws_url = build_ws_url(&self.config.base_path, &path)?;
         let mut request = tungstenite::http::Request::builder()
             .uri(&ws_url)

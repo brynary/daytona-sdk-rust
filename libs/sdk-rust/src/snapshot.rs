@@ -1,6 +1,9 @@
+use std::future::Future;
+
 use daytona_api_client::apis::configuration::Configuration as ApiConfig;
 use daytona_api_client::apis::snapshots_api;
 use daytona_api_client::models;
+use futures_util::StreamExt;
 
 use crate::client::convert_api_error;
 use crate::error::DaytonaError;
@@ -121,6 +124,61 @@ impl SnapshotService {
                 .await
                 .map_err(convert_api_error)?;
         Ok(snapshot)
+    }
+
+    /// Stream build logs for a snapshot.
+    ///
+    /// The control plane returns a short-lived log URL. `follow` keeps
+    /// the response open until the build ends; without it, the current
+    /// log history is returned and the stream closes.
+    pub async fn stream_build_logs<F, Fut>(
+        &self,
+        snapshot_id: &str,
+        follow: bool,
+        mut on_chunk: F,
+    ) -> Result<(), DaytonaError>
+    where
+        F: FnMut(Vec<u8>) -> Fut + Send,
+        Fut: Future<Output = Result<(), DaytonaError>> + Send,
+    {
+        let logs = snapshots_api::get_snapshot_build_logs_url(
+            &self.api_config,
+            snapshot_id,
+            self.org_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+        let mut url = url::Url::parse(&logs.url)
+            .map_err(|error| DaytonaError::general(format!("invalid snapshot log URL: {error}")))?;
+        url.query_pairs_mut()
+            .append_pair("follow", if follow { "true" } else { "false" });
+
+        let response = self
+            .api_config
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| {
+                DaytonaError::general(format!("failed to fetch snapshot build logs: {error}"))
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(DaytonaError::api(
+                status.as_u16(),
+                format!("failed to fetch snapshot build logs: {body}"),
+            ));
+        }
+
+        let mut chunks = response.bytes_stream();
+        while let Some(chunk) = chunks.next().await {
+            let chunk = chunk.map_err(|error| {
+                DaytonaError::general(format!("snapshot build log stream failed: {error}"))
+            })?;
+            on_chunk(chunk.to_vec()).await?;
+        }
+        Ok(())
     }
 
     /// Delete a snapshot by ID or name.
@@ -302,6 +360,39 @@ mod tests {
         let svc = snapshot_service(&mock_server).await;
         let err = svc.get("nonexistent").await.unwrap_err();
         assert!(matches!(err, DaytonaError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_stream_build_logs() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/snapshots/snap-1/build-logs-url"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "url": format!("{}/build-logs", mock_server.uri())
+            })))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/build-logs"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"step one\nstep two\n"))
+            .mount(&mock_server)
+            .await;
+
+        let svc = snapshot_service(&mock_server).await;
+        let chunks = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let received = std::sync::Arc::clone(&chunks);
+        svc.stream_build_logs("snap-1", true, move |chunk| {
+            let received = std::sync::Arc::clone(&received);
+            async move {
+                received.lock().await.extend(chunk);
+                Ok(())
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(&*chunks.lock().await, b"step one\nstep two\n");
     }
 
     fn snapshot_json(id: &str, name: &str, state: &str) -> serde_json::Value {
