@@ -418,32 +418,7 @@ impl Client {
     ) -> Result<daytona_toolbox_client::apis::configuration::Configuration, DaytonaError> {
         let toolbox_url = self.get_toolbox_proxy_url(sandbox_id, region).await?;
 
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = self.config.bearer_token() {
-            headers.insert(
-                reqwest::header::AUTHORIZATION,
-                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
-                    .map_err(|e| DaytonaError::general(e.to_string()))?,
-            );
-        }
-        // Add SDK identification headers (matching Go SDK's createToolboxClient)
-        headers.insert(
-            "X-Daytona-Source",
-            reqwest::header::HeaderValue::from_static(SDK_SOURCE),
-        );
-        if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
-            headers.insert("X-Daytona-SDK-Version", v);
-        }
-        headers.insert(
-            "X-Daytona-Split-Output",
-            reqwest::header::HeaderValue::from_static("true"),
-        );
-        // Add organization header when using JWT (matching Go SDK)
-        if let Some(org_id) = &self.config.organization_id {
-            if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {
-                headers.insert("X-Daytona-Organization-ID", v);
-            }
-        }
+        let headers = build_toolbox_headers(&self.config)?;
 
         let client = match self.config.http_client.clone() {
             Some(injected) => injected,
@@ -465,6 +440,43 @@ impl Client {
             api_key: None,
         })
     }
+}
+
+/// Headers shared by toolbox HTTP and WebSocket requests.
+///
+/// The generated HTTP client retains these as default headers. Manual
+/// WebSocket requests must receive the same map explicitly because they
+/// do not use the generated client's `reqwest::Client`.
+pub(crate) fn build_toolbox_headers(
+    config: &ResolvedConfig,
+) -> Result<reqwest::header::HeaderMap, DaytonaError> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = config.bearer_token() {
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
+                .map_err(|e| DaytonaError::general(e.to_string()))?,
+        );
+    }
+    headers.insert(
+        "X-Daytona-Source",
+        reqwest::header::HeaderValue::from_static(SDK_SOURCE),
+    );
+    if let Ok(value) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
+        headers.insert("X-Daytona-SDK-Version", value);
+    }
+    headers.insert(
+        "X-Daytona-Split-Output",
+        reqwest::header::HeaderValue::from_static("true"),
+    );
+    if let Some(organization_id) = &config.organization_id {
+        headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_str(organization_id)
+                .map_err(|e| DaytonaError::general(e.to_string()))?,
+        );
+    }
+    Ok(headers)
 }
 
 fn build_api_config(resolved: &ResolvedConfig) -> ApiConfiguration {
@@ -793,6 +805,23 @@ mod tests {
             .as_ref()
             .unwrap()
             .contains("daytona-sdk-rust"));
+    }
+
+    #[test]
+    fn test_build_toolbox_headers_includes_auth_and_organization() {
+        let config = crate::config::ResolvedConfig {
+            api_key: None,
+            jwt_token: Some("jwt-token".to_string()),
+            organization_id: Some("org-1".to_string()),
+            api_url: "https://test.example.com".to_string(),
+            target: None,
+            http_client: None,
+        };
+
+        let headers = build_toolbox_headers(&config).unwrap();
+        assert_eq!(headers[reqwest::header::AUTHORIZATION], "Bearer jwt-token");
+        assert_eq!(headers["X-Daytona-Organization-ID"], "org-1");
+        assert_eq!(headers["X-Daytona-Split-Output"], "true");
     }
 
     #[tokio::test]

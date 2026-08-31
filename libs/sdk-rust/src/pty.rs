@@ -86,6 +86,7 @@ struct CloseReason {
 pub struct PtyHandle {
     session_id: String,
     config: ToolboxConfig,
+    websocket_headers: reqwest::header::HeaderMap,
     writer: Mutex<WsSink>,
     output: Option<mpsc::Receiver<Vec<u8>>>,
     connection: watch::Receiver<ConnectionState>,
@@ -107,6 +108,7 @@ impl PtyHandle {
     /// failed handshake the socket is closed rather than leaked.
     pub(crate) async fn connect(
         config: ToolboxConfig,
+        websocket_headers: reqwest::header::HeaderMap,
         session_id: String,
         path: &str,
         envs: Option<&HashMap<String, String>>,
@@ -146,9 +148,10 @@ impl PtyHandle {
         if let Some(user_agent) = &config.user_agent {
             request = request.header(reqwest::header::USER_AGENT.as_str(), user_agent);
         }
-        let request = request
+        let mut request = request
             .body(())
             .map_err(|e| DaytonaError::general(format!("failed to build PTY request: {e}")))?;
+        request.headers_mut().extend(websocket_headers.clone());
 
         let (ws_stream, _) = tokio_tungstenite::connect_async(request)
             .await
@@ -163,6 +166,7 @@ impl PtyHandle {
         let mut handle = PtyHandle {
             session_id,
             config,
+            websocket_headers,
             writer: Mutex::new(writer),
             output: Some(output_rx),
             connection: connection_rx,
@@ -278,6 +282,7 @@ impl PtyHandle {
     ) -> Result<daytona_toolbox_client::models::PtySessionInfo, DaytonaError> {
         crate::ProcessService {
             config: self.config.clone(),
+            websocket_headers: self.websocket_headers.clone(),
         }
         .resize_pty_session(&self.session_id, cols, rows)
         .await
@@ -287,6 +292,7 @@ impl PtyHandle {
     pub async fn kill(&self) -> Result<(), DaytonaError> {
         crate::ProcessService {
             config: self.config.clone(),
+            websocket_headers: self.websocket_headers.clone(),
         }
         .kill_pty_session(&self.session_id)
         .await
@@ -449,11 +455,13 @@ mod tests {
     /// way the real daemon does — a client offering subprotocols must be
     /// answered with one, or strict clients (tungstenite, browsers)
     /// reject the handshake.
+    #[allow(clippy::result_large_err)] // Required by tungstenite's handshake callback type.
     async fn accept_with_subprotocol(
         stream: tokio::net::TcpStream,
     ) -> WebSocketStream<tokio::net::TcpStream> {
         use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
         tokio_tungstenite::accept_hdr_async(stream, |request: &Request, mut response: Response| {
+            assert_eq!(request.headers()["X-Daytona-Organization-ID"], "org-1");
             if let Some(offered) = request.headers().get("Sec-WebSocket-Protocol") {
                 let first = offered
                     .to_str()
@@ -483,6 +491,15 @@ mod tests {
             bearer_access_token: None,
             api_key: None,
         }
+    }
+
+    fn test_websocket_headers() -> reqwest::header::HeaderMap {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_static("org-1"),
+        );
+        headers
     }
 
     #[tokio::test]
@@ -521,6 +538,7 @@ mod tests {
 
         let mut handle = PtyHandle::connect(
             test_config(format!("http://{addr}")),
+            test_websocket_headers(),
             "pty-1".to_string(),
             "/process/pty/pty-1/connect",
             None,
@@ -560,6 +578,7 @@ mod tests {
 
         let handle = PtyHandle::connect(
             test_config(format!("http://{addr}")),
+            test_websocket_headers(),
             "pty-2".to_string(),
             "/process/pty/pty-2/connect",
             None,
@@ -597,6 +616,7 @@ mod tests {
 
         let handle = PtyHandle::connect(
             test_config(format!("http://{addr}")),
+            test_websocket_headers(),
             "pty-3".to_string(),
             "/process/pty/pty-3/connect",
             None,

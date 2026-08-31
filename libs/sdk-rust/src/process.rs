@@ -49,6 +49,7 @@ pub struct SessionCommandLogsResult {
 /// Service for executing commands and managing sessions in a sandbox.
 pub struct ProcessService {
     pub(crate) config: ToolboxConfig,
+    pub(crate) websocket_headers: reqwest::header::HeaderMap,
 }
 
 impl ProcessService {
@@ -293,9 +294,10 @@ impl ProcessService {
             request = request.header(reqwest::header::USER_AGENT.as_str(), user_agent);
         }
 
-        let request = request.body(()).map_err(|e| {
+        let mut request = request.body(()).map_err(|e| {
             DaytonaError::general(format!("failed to build log stream request: {e}"))
         })?;
+        request.headers_mut().extend(self.websocket_headers.clone());
 
         let (ws_stream, _) = tokio_tungstenite::connect_async(request)
             .await
@@ -388,6 +390,7 @@ impl ProcessService {
         }
         crate::PtyHandle::connect(
             self.config.clone(),
+            self.websocket_headers.clone(),
             id.to_string(),
             &path,
             options.envs.as_ref(),
@@ -399,7 +402,14 @@ impl ProcessService {
     /// [`crate::PtyHandle`]. Awaits the connection handshake.
     pub async fn connect_pty(&self, session_id: &str) -> Result<crate::PtyHandle, DaytonaError> {
         let path = format!("/process/pty/{}/connect", urlencode(session_id));
-        crate::PtyHandle::connect(self.config.clone(), session_id.to_string(), &path, None).await
+        crate::PtyHandle::connect(
+            self.config.clone(),
+            self.websocket_headers.clone(),
+            session_id.to_string(),
+            &path,
+            None,
+        )
+        .await
     }
 
     /// Create a PTY session.
@@ -717,7 +727,10 @@ mod tests {
             bearer_access_token: Some("test-token".to_string()),
             api_key: None,
         };
-        ProcessService { config }
+        ProcessService {
+            config,
+            websocket_headers: reqwest::header::HeaderMap::new(),
+        }
     }
 
     #[tokio::test]
@@ -990,6 +1003,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::result_large_err)] // Required by tungstenite's handshake callback type.
     async fn test_get_session_command_logs_stream_demuxes_websocket() {
         use futures_util::SinkExt;
         use tokio::net::TcpListener;
@@ -998,7 +1012,16 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(
+                stream,
+                |request: &tungstenite::handshake::server::Request,
+                 response: tungstenite::handshake::server::Response| {
+                    assert_eq!(request.headers()["X-Daytona-Organization-ID"], "org-1");
+                    Ok(response)
+                },
+            )
+            .await
+            .unwrap();
             ws.send(tungstenite::Message::Binary(
                 [STDOUT_PREFIX_BYTES, b"hello "].concat().into(),
             ))
@@ -1024,7 +1047,15 @@ mod tests {
             bearer_access_token: None,
             api_key: None,
         };
-        let svc = ProcessService { config };
+        let mut websocket_headers = reqwest::header::HeaderMap::new();
+        websocket_headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_static("org-1"),
+        );
+        let svc = ProcessService {
+            config,
+            websocket_headers,
+        };
         let stdout = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
         let stderr = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
 

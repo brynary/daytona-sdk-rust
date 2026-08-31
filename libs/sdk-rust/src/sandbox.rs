@@ -5,7 +5,7 @@ use daytona_api_client::apis::sandbox_api;
 use daytona_api_client::models;
 use daytona_api_client::models::SandboxState;
 
-use crate::client::{convert_api_error, convert_toolbox_error, Client, TOOLBOX_SDK_VERSION};
+use crate::client::{build_toolbox_headers, convert_api_error, convert_toolbox_error, Client};
 use crate::code_interpreter::CodeInterpreterService;
 use crate::computer_use::ComputerUseService;
 use crate::error::DaytonaError;
@@ -927,6 +927,7 @@ impl Sandbox {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
         Ok(ProcessService {
             config: toolbox_config.clone(),
+            websocket_headers: self.websocket_headers()?,
         })
     }
 
@@ -935,6 +936,7 @@ impl Sandbox {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
         Ok(CodeInterpreterService {
             config: toolbox_config.clone(),
+            websocket_headers: self.websocket_headers()?,
         })
     }
 
@@ -1211,6 +1213,12 @@ impl Sandbox {
             .await
     }
 
+    fn websocket_headers(&self) -> Result<reqwest::header::HeaderMap, DaytonaError> {
+        match &self.client {
+            ClientRef::Borrowed { config, .. } => build_toolbox_headers(config),
+        }
+    }
+
     async fn create_toolbox_config(
         &self,
     ) -> Result<daytona_toolbox_client::apis::configuration::Configuration, DaytonaError> {
@@ -1250,32 +1258,7 @@ impl Sandbox {
                     format!("{}/{}", base, sandbox_id)
                 };
 
-                let mut headers = reqwest::header::HeaderMap::new();
-                if let Some(token) = config.bearer_token() {
-                    headers.insert(
-                        reqwest::header::AUTHORIZATION,
-                        reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
-                            .map_err(|e| DaytonaError::general(e.to_string()))?,
-                    );
-                }
-                // Add SDK identification headers (matching Go SDK's createToolboxClient)
-                headers.insert(
-                    "X-Daytona-Source",
-                    reqwest::header::HeaderValue::from_static("rust-sdk"),
-                );
-                if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
-                    headers.insert("X-Daytona-SDK-Version", v);
-                }
-                headers.insert(
-                    "X-Daytona-Split-Output",
-                    reqwest::header::HeaderValue::from_static("true"),
-                );
-                // Add organization header when using JWT (matching Go SDK)
-                if let Some(org_id) = &config.organization_id {
-                    if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {
-                        headers.insert("X-Daytona-Organization-ID", v);
-                    }
-                }
+                let headers = build_toolbox_headers(config)?;
 
                 let client = reqwest::Client::builder()
                     .default_headers(headers)
