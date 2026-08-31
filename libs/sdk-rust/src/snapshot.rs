@@ -153,15 +153,16 @@ impl SnapshotService {
         url.query_pairs_mut()
             .append_pair("follow", if follow { "true" } else { "false" });
 
-        let response = self
-            .api_config
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|error| {
-                DaytonaError::general(format!("failed to fetch snapshot build logs: {error}"))
-            })?;
+        let mut request = self.api_config.client.get(url);
+        if let Some(token) = &self.api_config.bearer_access_token {
+            request = request.bearer_auth(token);
+        }
+        if let Some(org_id) = &self.org_id {
+            request = request.header("X-Daytona-Organization-ID", org_id);
+        }
+        let response = request.send().await.map_err(|error| {
+            DaytonaError::general(format!("failed to fetch snapshot build logs: {error}"))
+        })?;
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
@@ -271,7 +272,7 @@ fn is_uuid(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn snapshot_service(mock_server: &MockServer) -> SnapshotService {
@@ -375,6 +376,7 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/build-logs"))
+            .and(header("authorization", "Bearer test-token"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(b"step one\nstep two\n"))
             .mount(&mock_server)
             .await;
