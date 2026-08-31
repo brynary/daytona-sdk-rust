@@ -54,6 +54,9 @@ pub struct Sandbox {
     pub memory: f64,
     pub disk: f64,
     pub state: Option<SandboxState>,
+    /// The sandbox class (container, linux-vm, android, windows), which
+    /// gates class-specific operations like pause and fork.
+    pub sandbox_class: Option<models::SandboxClass>,
     pub error_reason: Option<String>,
     pub recoverable: Option<bool>,
     pub backup_state: Option<models::sandbox::BackupState>,
@@ -144,6 +147,7 @@ impl Sandbox {
             memory: api_sandbox.memory,
             disk: api_sandbox.disk,
             state: api_sandbox.state,
+            sandbox_class: api_sandbox.sandbox_class,
             error_reason: api_sandbox.error_reason,
             recoverable: api_sandbox.recoverable,
             backup_state: api_sandbox.backup_state,
@@ -1173,6 +1177,7 @@ impl Sandbox {
         self.labels = api_sandbox.labels;
         self.public = api_sandbox.public;
         self.state = api_sandbox.state;
+        self.sandbox_class = api_sandbox.sandbox_class;
         self.target = api_sandbox.target;
         self.cpu = api_sandbox.cpu;
         self.gpu = api_sandbox.gpu;
