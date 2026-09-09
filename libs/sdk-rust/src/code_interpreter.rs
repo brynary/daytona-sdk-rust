@@ -100,21 +100,18 @@ impl CodeInterpreterService {
             exec_req["contextId"] = serde_json::Value::String(ctx_id.clone());
         }
         if let Some(env) = &options.env {
-            exec_req["envs"] = serde_json::to_value(env)
-                .map_err(|e| DaytonaError::general(e.to_string()))?;
+            exec_req["envs"] =
+                serde_json::to_value(env).map_err(|e| DaytonaError::general(e.to_string()))?;
         }
         if let Some(timeout) = &options.timeout {
-            exec_req["timeout"] = serde_json::Value::Number(
-                serde_json::Number::from(timeout.as_secs()),
-            );
+            exec_req["timeout"] =
+                serde_json::Value::Number(serde_json::Number::from(timeout.as_secs()));
         }
 
         write
             .send(tungstenite::Message::Text(exec_req.to_string().into()))
             .await
-            .map_err(|e| {
-                DaytonaError::general(format!("failed to send execute request: {}", e))
-            })?;
+            .map_err(|e| DaytonaError::general(format!("failed to send execute request: {}", e)))?;
 
         // Collect output
         let mut result = ExecutionResult::default();
@@ -144,23 +141,16 @@ impl CodeInterpreterService {
             match msg {
                 tungstenite::Message::Text(text) => {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        let msg_type = json
-                            .get("type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
+                        let msg_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
                         match msg_type {
                             "stdout" => {
-                                let content = json
-                                    .get("text")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
+                                let content =
+                                    json.get("text").and_then(|v| v.as_str()).unwrap_or("");
                                 stdout_buf.push_str(content);
                             }
                             "stderr" => {
-                                let content = json
-                                    .get("text")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
+                                let content =
+                                    json.get("text").and_then(|v| v.as_str()).unwrap_or("");
                                 stderr_buf.push_str(content);
                             }
                             "error" => {
@@ -239,8 +229,8 @@ impl CodeInterpreterService {
 /// Convert an HTTP(S) base URL to a WebSocket URL with the given path.
 fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
     let full = format!("{}{}", base_url, path);
-    let url = url::Url::parse(&full)
-        .map_err(|e| DaytonaError::general(format!("invalid URL: {}", e)))?;
+    let url =
+        url::Url::parse(&full).map_err(|e| DaytonaError::general(format!("invalid URL: {}", e)))?;
     let scheme = match url.scheme() {
         "http" => "ws",
         "https" => "wss",
@@ -262,13 +252,15 @@ fn build_ws_url(base_url: &str, path: &str) -> Result<String, DaytonaError> {
 fn extract_host(url: &str) -> String {
     url::Url::parse(url)
         .ok()
-        .and_then(|u| u.host_str().map(|h| {
-            if let Some(port) = u.port() {
-                format!("{}:{}", h, port)
-            } else {
-                h.to_string()
-            }
-        }))
+        .and_then(|u| {
+            u.host_str().map(|h| {
+                if let Some(port) = u.port() {
+                    format!("{}:{}", h, port)
+                } else {
+                    h.to_string()
+                }
+            })
+        })
         .unwrap_or_default()
 }
 
@@ -434,8 +426,11 @@ mod tests {
 
     #[test]
     fn test_build_ws_url_https() {
-        let result =
-            build_ws_url("https://proxy.daytona.io/sb-1", "/process/interpreter/execute").unwrap();
+        let result = build_ws_url(
+            "https://proxy.daytona.io/sb-1",
+            "/process/interpreter/execute",
+        )
+        .unwrap();
         assert_eq!(
             result,
             "wss://proxy.daytona.io/sb-1/process/interpreter/execute"
@@ -457,6 +452,9 @@ mod tests {
 
     #[test]
     fn test_extract_host_without_port() {
-        assert_eq!(extract_host("https://proxy.daytona.io/path"), "proxy.daytona.io");
+        assert_eq!(
+            extract_host("https://proxy.daytona.io/path"),
+            "proxy.daytona.io"
+        );
     }
 }

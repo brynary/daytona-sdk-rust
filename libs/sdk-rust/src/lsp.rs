@@ -99,14 +99,10 @@ impl LspService {
         path: &str,
     ) -> Result<Vec<daytona_toolbox_client::models::LspSymbol>, DaytonaError> {
         let uri = ensure_file_uri(path);
-        let symbols = lsp_api::document_symbols(
-            &self.config,
-            &self.language_id,
-            &self.project_path,
-            &uri,
-        )
-        .await
-        .map_err(convert_toolbox_error)?;
+        let symbols =
+            lsp_api::document_symbols(&self.config, &self.language_id, &self.project_path, &uri)
+                .await
+                .map_err(convert_toolbox_error)?;
         Ok(symbols)
     }
 
@@ -118,14 +114,10 @@ impl LspService {
         &self,
         query: &str,
     ) -> Result<Vec<daytona_toolbox_client::models::LspSymbol>, DaytonaError> {
-        let symbols = lsp_api::workspace_symbols(
-            &self.config,
-            query,
-            &self.language_id,
-            &self.project_path,
-        )
-        .await
-        .map_err(convert_toolbox_error)?;
+        let symbols =
+            lsp_api::workspace_symbols(&self.config, query, &self.language_id, &self.project_path)
+                .await
+                .map_err(convert_toolbox_error)?;
         Ok(symbols)
     }
 
@@ -143,10 +135,7 @@ impl LspService {
         let req = daytona_toolbox_client::models::LspCompletionParams {
             language_id: self.language_id.clone(),
             path_to_project: self.project_path.clone(),
-            position: Box::new(daytona_toolbox_client::models::LspPosition {
-                line,
-                character,
-            }),
+            position: Box::new(daytona_toolbox_client::models::LspPosition { line, character }),
             uri,
             context: None,
         };

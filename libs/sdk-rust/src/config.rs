@@ -25,6 +25,11 @@ pub struct DaytonaConfig {
     /// case; bearer auth and per-request headers still flow through the
     /// generated `Configuration`.
     pub http_client: Option<reqwest::Client>,
+    /// `User-Agent` sent on API, toolbox, and WebSocket requests. When
+    /// `None`, the SDK identifies itself as `daytona-sdk-rust/<version>`.
+    /// Embedding applications set their own product token here so the
+    /// control plane can attribute traffic to them.
+    pub user_agent: Option<String>,
 }
 
 /// Resolved configuration with validated fields.
@@ -36,6 +41,7 @@ pub(crate) struct ResolvedConfig {
     pub api_url: String,
     pub target: Option<String>,
     pub http_client: Option<reqwest::Client>,
+    pub user_agent: String,
 }
 
 impl ResolvedConfig {
@@ -100,6 +106,11 @@ pub(crate) fn resolve_config(config: &DaytonaConfig) -> Result<ResolvedConfig, D
         api_url,
         target,
         http_client: config.http_client.clone(),
+        user_agent: config
+            .user_agent
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("daytona-sdk-rust/{}", env!("CARGO_PKG_VERSION"))),
     })
 }
 
@@ -248,6 +259,42 @@ mod tests {
             let resolved = resolve_config(&config).unwrap();
             assert!(resolved.api_key.is_none());
             assert_eq!(resolved.jwt_token.as_deref(), Some("actual-token"));
+        });
+    }
+
+    #[test]
+    fn test_user_agent_defaults_to_sdk_identity() {
+        with_clean_env(|| {
+            let config = DaytonaConfig {
+                api_key: Some("key".to_string()),
+                ..Default::default()
+            };
+            let resolved = resolve_config(&config).unwrap();
+            assert_eq!(
+                resolved.user_agent,
+                format!("daytona-sdk-rust/{}", env!("CARGO_PKG_VERSION"))
+            );
+        });
+    }
+
+    #[test]
+    fn test_user_agent_override_replaces_sdk_identity() {
+        with_clean_env(|| {
+            let config = DaytonaConfig {
+                api_key: Some("key".to_string()),
+                user_agent: Some("fabro-sandbox/1.2.3".to_string()),
+                ..Default::default()
+            };
+            let resolved = resolve_config(&config).unwrap();
+            assert_eq!(resolved.user_agent, "fabro-sandbox/1.2.3");
+
+            let empty = DaytonaConfig {
+                api_key: Some("key".to_string()),
+                user_agent: Some(String::new()),
+                ..Default::default()
+            };
+            let resolved = resolve_config(&empty).unwrap();
+            assert!(resolved.user_agent.starts_with("daytona-sdk-rust/"));
         });
     }
 

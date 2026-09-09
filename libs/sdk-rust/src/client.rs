@@ -433,7 +433,7 @@ impl Client {
         Ok(daytona_toolbox_client::apis::configuration::Configuration {
             base_path: toolbox_url,
             client: mw_client,
-            user_agent: Some(format!("daytona-sdk-rust/{}", SDK_VERSION)),
+            user_agent: Some(self.config.user_agent.clone()),
             basic_auth: None,
             oauth_access_token: None,
             bearer_access_token: self.config.bearer_token().map(|s| s.to_string()),
@@ -507,7 +507,7 @@ fn build_api_config(resolved: &ResolvedConfig) -> ApiConfiguration {
     ApiConfiguration {
         base_path: resolved.api_url.clone(),
         client: mw_client,
-        user_agent: Some(format!("daytona-sdk-rust/{}", SDK_VERSION)),
+        user_agent: Some(resolved.user_agent.clone()),
         basic_auth: None,
         oauth_access_token: None,
         bearer_access_token: resolved.bearer_token().map(|s| s.to_string()),
@@ -807,6 +807,21 @@ mod tests {
             .contains("daytona-sdk-rust"));
     }
 
+    #[tokio::test]
+    async fn test_client_user_agent_override() {
+        let config = DaytonaConfig {
+            api_key: Some("key".to_string()),
+            api_url: Some("https://test.example.com".to_string()),
+            user_agent: Some("embedding-app/9.9".to_string()),
+            ..Default::default()
+        };
+        let client = Client::new_with_config(config).await.unwrap();
+        assert_eq!(
+            client.api_config.user_agent.as_deref(),
+            Some("embedding-app/9.9")
+        );
+    }
+
     #[test]
     fn test_build_toolbox_headers_includes_auth_and_organization() {
         let config = crate::config::ResolvedConfig {
@@ -816,6 +831,7 @@ mod tests {
             api_url: "https://test.example.com".to_string(),
             target: None,
             http_client: None,
+            user_agent: "daytona-sdk-rust/test".to_string(),
         };
 
         let headers = build_toolbox_headers(&config).unwrap();
@@ -1354,6 +1370,7 @@ mod tests {
             api_url: "https://example".to_string(),
             target: Some("us".to_string()),
             http_client: None,
+            user_agent: "daytona-sdk-rust/test".to_string(),
         };
         let mut cs = models::CreateSandbox::new();
         apply_base_params(&mut cs, &base, &resolved);

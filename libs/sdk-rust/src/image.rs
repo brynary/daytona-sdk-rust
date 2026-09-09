@@ -119,8 +119,7 @@ impl DockerImage {
     /// `json.Marshal(cmd)` approach.
     pub fn entrypoint(mut self, args: &[&str]) -> Self {
         let json_array = serde_json::to_string(args).unwrap_or_else(|_| "[]".to_string());
-        self.instructions
-            .push(format!("ENTRYPOINT {}", json_array));
+        self.instructions.push(format!("ENTRYPOINT {}", json_array));
         self
     }
 

@@ -377,9 +377,8 @@ impl RecordingService<'_> {
             }
         }
 
-        std::fs::write(local_path, &bytes).map_err(|e| {
-            DaytonaError::general(format!("failed to write recording file: {}", e))
-        })?;
+        std::fs::write(local_path, &bytes)
+            .map_err(|e| DaytonaError::general(format!("failed to write recording file: {}", e)))?;
 
         Ok(())
     }
@@ -678,9 +677,7 @@ mod tests {
 
         let svc = cu_service(&mock_server).await;
         let kb = svc.keyboard();
-        kb.press("c", Some(vec!["ctrl".to_string()]))
-            .await
-            .unwrap();
+        kb.press("c", Some(vec!["ctrl".to_string()])).await.unwrap();
     }
 
     #[tokio::test]
@@ -709,9 +706,7 @@ mod tests {
         let recording_data = b"fake-video-data";
         Mock::given(method("GET"))
             .and(path("/computeruse/recordings/rec-1/download"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_bytes(recording_data.to_vec()),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(recording_data.to_vec()))
             .mount(&mock_server)
             .await;
 

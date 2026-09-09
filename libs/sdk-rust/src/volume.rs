@@ -86,12 +86,8 @@ impl VolumeService {
         volume_id: &str,
         timeout: Option<Duration>,
     ) -> Result<daytona_api_client::models::VolumeDto, DaytonaError> {
-        self.poll_volume_state(
-            |svc| Box::pin(svc.get(volume_id)),
-            volume_id,
-            timeout,
-        )
-        .await
+        self.poll_volume_state(|svc| Box::pin(svc.get(volume_id)), volume_id, timeout)
+            .await
     }
 
     /// Wait for a volume to be ready, polling by name.
@@ -119,7 +115,16 @@ impl VolumeService {
         timeout: Option<Duration>,
     ) -> Result<daytona_api_client::models::VolumeDto, DaytonaError>
     where
-        F: Fn(&'a Self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<daytona_api_client::models::VolumeDto, DaytonaError>> + Send + 'a>>,
+        F: Fn(
+            &'a Self,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<daytona_api_client::models::VolumeDto, DaytonaError>,
+                    > + Send
+                    + 'a,
+            >,
+        >,
     {
         let deadline = timeout.map(|t| tokio::time::Instant::now() + t);
 
