@@ -38,7 +38,7 @@
       "options": {
         "commands": [
           "rm -rf {projectRoot}/src {projectRoot}/docs",
-          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/toolbox-api-client-rust --git-user-id=daytonaio -i apps/daemon/pkg/toolbox/docs/swagger.json -g rust --additional-properties=packageName=daytona-toolbox-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true -o libs/toolbox-api-client-rust",
+          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/toolbox-api-client-rust --git-user-id=daytonaio -i apps/daemon/pkg/toolbox/docs/swagger.json -g rust --additional-properties=packageName=daytona-toolbox-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true,enumUnknownDefaultCase=true -o libs/toolbox-api-client-rust",
           "bash hack/rust-client/postprocess.sh libs/toolbox-api-client-rust"
         ],
         "parallel": false

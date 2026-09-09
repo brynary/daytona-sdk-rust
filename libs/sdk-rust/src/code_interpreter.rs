@@ -36,6 +36,7 @@ pub struct OutputMessage {
 /// Service for code interpreter operations in a sandbox.
 pub struct CodeInterpreterService {
     pub(crate) config: ToolboxConfig,
+    pub(crate) websocket_headers: reqwest::header::HeaderMap,
 }
 
 impl CodeInterpreterService {
@@ -78,9 +79,10 @@ impl CodeInterpreterService {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let request = request
-            .body(())
-            .map_err(|e| DaytonaError::general(format!("failed to build WebSocket request: {}", e)))?;
+        let mut request = request.body(()).map_err(|e| {
+            DaytonaError::general(format!("failed to build WebSocket request: {}", e))
+        })?;
+        request.headers_mut().extend(self.websocket_headers.clone());
 
         let (ws_stream, _) = tokio_tungstenite::connect_async(request)
             .await
@@ -286,7 +288,64 @@ mod tests {
             bearer_access_token: Some("test-token".to_string()),
             api_key: None,
         };
-        CodeInterpreterService { config }
+        CodeInterpreterService {
+            config,
+            websocket_headers: reqwest::header::HeaderMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::result_large_err)] // Required by tungstenite's handshake callback type.
+    async fn test_run_code_sends_websocket_headers() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_hdr_async(
+                stream,
+                |request: &tungstenite::handshake::server::Request,
+                 response: tungstenite::handshake::server::Response| {
+                    assert_eq!(request.headers()["X-Daytona-Organization-ID"], "org-1");
+                    Ok(response)
+                },
+            )
+            .await
+            .unwrap();
+            assert!(websocket.next().await.is_some());
+            websocket
+                .send(tungstenite::Message::Text(
+                    r#"{"type":"stdout","text":"ok\n"}"#.into(),
+                ))
+                .await
+                .unwrap();
+            websocket.close(None).await.unwrap();
+        });
+
+        let config = ToolboxConfig {
+            base_path: format!("http://{addr}"),
+            client: reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build(),
+            user_agent: None,
+            basic_auth: None,
+            oauth_access_token: None,
+            bearer_access_token: None,
+            api_key: None,
+        };
+        let mut websocket_headers = reqwest::header::HeaderMap::new();
+        websocket_headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_static("org-1"),
+        );
+        let service = CodeInterpreterService {
+            config,
+            websocket_headers,
+        };
+
+        let result = service
+            .run_code("print('ok')", crate::types::RunCodeOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(result.stdout, "ok\n");
+        server.await.unwrap();
     }
 
     #[tokio::test]

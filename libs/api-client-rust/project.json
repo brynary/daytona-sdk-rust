@@ -38,7 +38,7 @@
       "options": {
         "commands": [
           "rm -rf {projectRoot}/src {projectRoot}/docs",
-          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/api-client-rust --git-user-id=daytonaio -i dist/apps/api/openapi.json -g rust --additional-properties=packageName=daytona-api-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true -o libs/api-client-rust",
+          "yarn run openapi-generator-cli generate --git-repo-id=daytona/libs/api-client-rust --git-user-id=daytonaio -i dist/apps/api/openapi.json -g rust --additional-properties=packageName=daytona-api-client,packageVersion=$DEFAULT_PACKAGE_VERSION,library=reqwest,supportMiddleware=true,enumUnknownDefaultCase=true -o libs/api-client-rust",
           "bash hack/rust-client/postprocess.sh libs/api-client-rust"
         ],
         "parallel": false

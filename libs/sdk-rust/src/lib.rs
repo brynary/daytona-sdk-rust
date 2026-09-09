@@ -8,6 +8,7 @@ pub mod git;
 pub mod image;
 pub mod lsp;
 pub mod process;
+pub mod pty;
 pub mod sandbox;
 pub mod snapshot;
 pub mod types;
@@ -20,7 +21,7 @@ pub use error::DaytonaError;
 pub use sandbox::Sandbox;
 
 // Re-export SandboxState from generated client (matches Go/TS enum usage)
-pub use daytona_api_client::models::SandboxState;
+pub use daytona_api_client::models::{SandboxClass, SandboxState};
 
 // Re-export sandbox-related enums exposed on the Sandbox struct
 pub use daytona_api_client::models::sandbox::BackupState;
@@ -29,13 +30,15 @@ pub use daytona_api_client::models::sandbox::BackupState;
 pub use types::{
     CodeLanguage, CreateParams, CreateSandboxOptions, CreateSnapshotParams, ExecuteCommandOptions,
     ExecuteResponse, GitCloneOptions, GitCommitOptions, GitDeleteBranchOptions, GitPullOptions,
-    GitPushOptions, ImageParams, ImageSource, PaginatedSandboxes, PreviewLink, PtySessionOptions,
-    PtySize, Resources, RunCodeOptions, SandboxBaseParams, ScreenshotOptions, ScreenshotRegion,
-    SetFilePermissionsOptions, SnapshotParams, VolumeMount,
+    GitPushOptions, ImageParams, ImageSource, PaginatedSandboxes, PreviewLink, PtyCreateOptions,
+    PtyResult, PtySessionOptions, PtySize, Resources, RunCodeOptions, SandboxBaseParams,
+    ScreenshotOptions, ScreenshotRegion, SetFilePermissionsOptions, SnapshotParams, VolumeMount,
 };
 
 // Service re-exports
-pub use code_interpreter::{CodeInterpreterService, ExecutionError, ExecutionResult, OutputMessage};
+pub use code_interpreter::{
+    CodeInterpreterService, ExecutionError, ExecutionResult, OutputMessage,
+};
 pub use computer_use::{
     ComputerUseService, DisplayService, KeyboardService, MouseService, RecordingService,
     ScreenshotService,
@@ -45,6 +48,7 @@ pub use git::GitService;
 pub use image::DockerImage;
 pub use lsp::LspService;
 pub use process::{ProcessService, SessionCommandLogsResult, SessionExecuteResult};
+pub use pty::PtyHandle;
 pub use snapshot::SnapshotService;
 pub use volume::VolumeService;
 
@@ -66,6 +70,6 @@ pub mod toolbox_types {
 pub mod api_types {
     pub use daytona_api_client::models::{
         PaginatedSnapshots, SignedPortPreviewUrl, SnapshotDto, SshAccessDto,
-        SshAccessValidationDto, VolumeDto, VolumeState,
+        SshAccessValidationDto, UpdateSandboxNetworkSettings, VolumeDto, VolumeState,
     };
 }

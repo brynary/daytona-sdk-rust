@@ -34,6 +34,22 @@ impl Client {
         Self::new_with_config(DaytonaConfig::default()).await
     }
 
+    /// The underlying generated API client configuration.
+    ///
+    /// Rust-specific escape hatch (the reference SDKs keep their generated
+    /// clients internal): lets callers reach `daytona_api_client` endpoints
+    /// the SDK does not wrap without re-deriving authentication from the
+    /// environment. Pair with [`Client::organization_id`] for endpoints
+    /// taking the `X-Daytona-Organization-ID` parameter.
+    pub fn api_configuration(&self) -> &ApiConfiguration {
+        &self.api_config
+    }
+
+    /// The resolved organization id, when one is configured.
+    pub fn organization_id(&self) -> Option<&str> {
+        self.config.organization_id.as_deref()
+    }
+
     /// Create a new client with explicit configuration.
     /// Config fields take precedence over environment variables.
     pub async fn new_with_config(config: DaytonaConfig) -> Result<Self, DaytonaError> {
@@ -402,32 +418,7 @@ impl Client {
     ) -> Result<daytona_toolbox_client::apis::configuration::Configuration, DaytonaError> {
         let toolbox_url = self.get_toolbox_proxy_url(sandbox_id, region).await?;
 
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = self.config.bearer_token() {
-            headers.insert(
-                reqwest::header::AUTHORIZATION,
-                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
-                    .map_err(|e| DaytonaError::general(e.to_string()))?,
-            );
-        }
-        // Add SDK identification headers (matching Go SDK's createToolboxClient)
-        headers.insert(
-            "X-Daytona-Source",
-            reqwest::header::HeaderValue::from_static(SDK_SOURCE),
-        );
-        if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
-            headers.insert("X-Daytona-SDK-Version", v);
-        }
-        headers.insert(
-            "X-Daytona-Split-Output",
-            reqwest::header::HeaderValue::from_static("true"),
-        );
-        // Add organization header when using JWT (matching Go SDK)
-        if let Some(org_id) = &self.config.organization_id {
-            if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {
-                headers.insert("X-Daytona-Organization-ID", v);
-            }
-        }
+        let headers = build_toolbox_headers(&self.config)?;
 
         let client = match self.config.http_client.clone() {
             Some(injected) => injected,
@@ -449,6 +440,43 @@ impl Client {
             api_key: None,
         })
     }
+}
+
+/// Headers shared by toolbox HTTP and WebSocket requests.
+///
+/// The generated HTTP client retains these as default headers. Manual
+/// WebSocket requests must receive the same map explicitly because they
+/// do not use the generated client's `reqwest::Client`.
+pub(crate) fn build_toolbox_headers(
+    config: &ResolvedConfig,
+) -> Result<reqwest::header::HeaderMap, DaytonaError> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = config.bearer_token() {
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
+                .map_err(|e| DaytonaError::general(e.to_string()))?,
+        );
+    }
+    headers.insert(
+        "X-Daytona-Source",
+        reqwest::header::HeaderValue::from_static(SDK_SOURCE),
+    );
+    if let Ok(value) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
+        headers.insert("X-Daytona-SDK-Version", value);
+    }
+    headers.insert(
+        "X-Daytona-Split-Output",
+        reqwest::header::HeaderValue::from_static("true"),
+    );
+    if let Some(organization_id) = &config.organization_id {
+        headers.insert(
+            "X-Daytona-Organization-ID",
+            reqwest::header::HeaderValue::from_str(organization_id)
+                .map_err(|e| DaytonaError::general(e.to_string()))?,
+        );
+    }
+    Ok(headers)
 }
 
 fn build_api_config(resolved: &ResolvedConfig) -> ApiConfiguration {
@@ -545,6 +573,36 @@ fn validate_base_params(base: &crate::types::SandboxBaseParams) -> Result<(), Da
             ));
         }
     }
+    if let Some(interval) = base.auto_pause_interval {
+        if interval < 0 {
+            return Err(DaytonaError::general(
+                "autoPauseInterval must be a non-negative integer",
+            ));
+        }
+    }
+    // At most one of auto-stop and auto-pause may be non-zero (TS/Go check
+    // truthiness, so zero — "disabled" — on either side is fine).
+    if base
+        .auto_stop_interval
+        .is_some_and(|interval| interval != 0)
+        && base
+            .auto_pause_interval
+            .is_some_and(|interval| interval != 0)
+    {
+        return Err(DaytonaError::general(
+            "autoStopInterval and autoPauseInterval are mutually exclusive. \
+             Set at most one of them to a non-zero value",
+        ));
+    }
+    if base
+        .auto_pause_interval
+        .is_some_and(|interval| interval != 0)
+        && (base.ephemeral == Some(true) || base.auto_delete_interval == Some(0))
+    {
+        return Err(DaytonaError::general(
+            "Ephemeral sandboxes cannot have auto-pause enabled. Set autoPauseInterval to 0",
+        ));
+    }
     if let Some(interval) = base.auto_archive_interval {
         if interval < 0 {
             return Err(DaytonaError::general(
@@ -552,6 +610,15 @@ fn validate_base_params(base: &crate::types::SandboxBaseParams) -> Result<(), Da
             ));
         }
     }
+    if let Some(ttl) = base.ttl_minutes {
+        if ttl < 0 {
+            return Err(DaytonaError::general(
+                "ttlMinutes must be a non-negative integer",
+            ));
+        }
+    }
+    // Note: autoDeleteInterval deliberately gets no validation — negative
+    // values legitimately mean "disabled" (matching TS/Go).
     Ok(())
 }
 
@@ -570,7 +637,9 @@ fn apply_base_params(
     // to apply different defaults).
     cs.public = Some(base.public.unwrap_or(false));
     cs.auto_stop_interval = base.auto_stop_interval;
+    cs.auto_pause_interval = base.auto_pause_interval;
     cs.auto_archive_interval = base.auto_archive_interval;
+    cs.ttl_minutes = base.ttl_minutes;
 
     // Handle ephemeral sandboxes: set auto_delete_interval to 0
     if base.ephemeral == Some(true) {
@@ -583,6 +652,10 @@ fn apply_base_params(
     if let Some(allow_list) = &base.network_allow_list {
         cs.network_allow_list = Some(allow_list.join(","));
     }
+    if let Some(domain_list) = &base.domain_allow_list {
+        cs.domain_allow_list = Some(domain_list.join(","));
+    }
+    cs.outbound_proxy_url = base.outbound_proxy_url.clone();
     if let Some(volumes) = &base.volumes {
         let api_volumes: Vec<models::SandboxVolume> = volumes
             .iter()
@@ -594,7 +667,7 @@ fn apply_base_params(
             .collect();
         cs.volumes = Some(api_volumes);
     }
-    cs.target = config.target.clone();
+    cs.target = base.target.clone().or_else(|| config.target.clone());
 }
 
 /// Convert a generated API client error to a DaytonaError.
@@ -732,6 +805,23 @@ mod tests {
             .as_ref()
             .unwrap()
             .contains("daytona-sdk-rust"));
+    }
+
+    #[test]
+    fn test_build_toolbox_headers_includes_auth_and_organization() {
+        let config = crate::config::ResolvedConfig {
+            api_key: None,
+            jwt_token: Some("jwt-token".to_string()),
+            organization_id: Some("org-1".to_string()),
+            api_url: "https://test.example.com".to_string(),
+            target: None,
+            http_client: None,
+        };
+
+        let headers = build_toolbox_headers(&config).unwrap();
+        assert_eq!(headers[reqwest::header::AUTHORIZATION], "Bearer jwt-token");
+        assert_eq!(headers["X-Daytona-Organization-ID"], "org-1");
+        assert_eq!(headers["X-Daytona-Split-Output"], "true");
     }
 
     #[tokio::test]
@@ -1204,5 +1294,76 @@ mod tests {
         let client = Client::new_with_config(config).await.unwrap();
         let err = client.list(None, None, Some(0)).await.unwrap_err();
         assert!(err.message().contains("limit must be a positive integer"));
+    }
+
+    #[test]
+    fn test_validate_base_params_auto_pause_rules() {
+        let mut base = crate::types::SandboxBaseParams {
+            auto_pause_interval: Some(-1),
+            ..Default::default()
+        };
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("autoPauseInterval"));
+
+        // Non-zero auto-stop and auto-pause are mutually exclusive; zero
+        // on either side means "disabled" and is fine.
+        base.auto_pause_interval = Some(30);
+        base.auto_stop_interval = Some(15);
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("mutually exclusive"));
+        base.auto_stop_interval = Some(0);
+        validate_base_params(&base).unwrap();
+
+        // Ephemeral sandboxes cannot auto-pause.
+        base.ephemeral = Some(true);
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("Ephemeral"));
+    }
+
+    #[test]
+    fn test_validate_base_params_ttl_and_auto_delete() {
+        let base = crate::types::SandboxBaseParams {
+            ttl_minutes: Some(-1),
+            ..Default::default()
+        };
+        let err = validate_base_params(&base).unwrap_err();
+        assert!(err.message().contains("ttlMinutes"));
+
+        // Negative auto-delete legitimately means "disabled".
+        let base = crate::types::SandboxBaseParams {
+            auto_delete_interval: Some(-1),
+            ..Default::default()
+        };
+        validate_base_params(&base).unwrap();
+    }
+
+    #[test]
+    fn test_apply_base_params_maps_new_fields() {
+        let base = crate::types::SandboxBaseParams {
+            auto_pause_interval: Some(60),
+            ttl_minutes: Some(240),
+            target: Some("eu".to_string()),
+            domain_allow_list: Some(vec!["example.com".to_string(), "*.daytona.io".to_string()]),
+            outbound_proxy_url: Some("http://proxy:3128".to_string()),
+            ..Default::default()
+        };
+        let resolved = crate::config::ResolvedConfig {
+            api_key: Some("k".to_string()),
+            jwt_token: None,
+            organization_id: None,
+            api_url: "https://example".to_string(),
+            target: Some("us".to_string()),
+            http_client: None,
+        };
+        let mut cs = models::CreateSandbox::new();
+        apply_base_params(&mut cs, &base, &resolved);
+        assert_eq!(cs.auto_pause_interval, Some(60));
+        assert_eq!(cs.ttl_minutes, Some(240));
+        assert_eq!(
+            cs.domain_allow_list.as_deref(),
+            Some("example.com,*.daytona.io")
+        );
+        assert_eq!(cs.outbound_proxy_url.as_deref(), Some("http://proxy:3128"));
+        assert_eq!(cs.target.as_deref(), Some("eu"));
     }
 }

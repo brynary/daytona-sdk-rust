@@ -5,7 +5,7 @@ use daytona_api_client::apis::sandbox_api;
 use daytona_api_client::models;
 use daytona_api_client::models::SandboxState;
 
-use crate::client::{convert_api_error, convert_toolbox_error, Client, TOOLBOX_SDK_VERSION};
+use crate::client::{build_toolbox_headers, convert_api_error, convert_toolbox_error, Client};
 use crate::code_interpreter::CodeInterpreterService;
 use crate::computer_use::ComputerUseService;
 use crate::error::DaytonaError;
@@ -54,17 +54,25 @@ pub struct Sandbox {
     pub memory: f64,
     pub disk: f64,
     pub state: Option<SandboxState>,
+    /// The sandbox class (container, linux-vm, android, windows), which
+    /// gates class-specific operations like pause and fork.
+    pub sandbox_class: Option<models::sandbox::SandboxClass>,
     pub error_reason: Option<String>,
     pub recoverable: Option<bool>,
     pub backup_state: Option<models::sandbox::BackupState>,
     pub backup_created_at: Option<String>,
     pub auto_stop_interval: Option<f64>,
+    pub auto_pause_interval: Option<f64>,
     pub auto_archive_interval: Option<f64>,
     pub auto_delete_interval: Option<f64>,
+    /// Wall-clock deletion deadline set by the TTL, when one is active.
+    pub auto_destroy_at: Option<String>,
     pub volumes: Option<Vec<models::SandboxVolume>>,
     pub build_info: Option<Box<models::BuildInfo>>,
     pub network_block_all: bool,
     pub network_allow_list: Option<String>,
+    pub domain_allow_list: Option<String>,
+    pub outbound_proxy_url: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
 
@@ -87,6 +95,43 @@ pub(crate) enum ClientRef {
 
 impl Sandbox {
     pub(crate) fn new(client: &Client, api_sandbox: models::Sandbox) -> Self {
+        Self::from_parts(
+            api_sandbox,
+            client.api_config.clone(),
+            client.config.organization_id.clone(),
+            ClientRef::Borrowed {
+                toolbox_proxy_cache: client.toolbox_proxy_cache.clone(),
+                config: client.config.clone(),
+            },
+        )
+    }
+
+    /// Build a sibling Sandbox (e.g. a fork result) sharing this sandbox's
+    /// client wiring.
+    fn sibling(&self, api_sandbox: models::Sandbox) -> Self {
+        let client = match &self.client {
+            ClientRef::Borrowed {
+                toolbox_proxy_cache,
+                config,
+            } => ClientRef::Borrowed {
+                toolbox_proxy_cache: toolbox_proxy_cache.clone(),
+                config: config.clone(),
+            },
+        };
+        Self::from_parts(
+            api_sandbox,
+            self.api_config.clone(),
+            self.org_id.clone(),
+            client,
+        )
+    }
+
+    fn from_parts(
+        api_sandbox: models::Sandbox,
+        api_config: daytona_api_client::apis::configuration::Configuration,
+        org_id: Option<String>,
+        client: ClientRef,
+    ) -> Self {
         Sandbox {
             id: api_sandbox.id,
             organization_id: api_sandbox.organization_id,
@@ -102,30 +147,37 @@ impl Sandbox {
             memory: api_sandbox.memory,
             disk: api_sandbox.disk,
             state: api_sandbox.state,
+            sandbox_class: api_sandbox.sandbox_class,
             error_reason: api_sandbox.error_reason,
             recoverable: api_sandbox.recoverable,
             backup_state: api_sandbox.backup_state,
             backup_created_at: api_sandbox.backup_created_at,
             auto_stop_interval: api_sandbox.auto_stop_interval,
+            auto_pause_interval: api_sandbox.auto_pause_interval,
             auto_archive_interval: api_sandbox.auto_archive_interval,
             auto_delete_interval: api_sandbox.auto_delete_interval,
+            auto_destroy_at: api_sandbox.auto_destroy_at,
             volumes: api_sandbox.volumes,
             build_info: api_sandbox.build_info,
             network_block_all: api_sandbox.network_block_all,
             network_allow_list: api_sandbox.network_allow_list,
+            domain_allow_list: api_sandbox.domain_allow_list,
+            outbound_proxy_url: api_sandbox.outbound_proxy_url,
             created_at: api_sandbox.created_at,
             updated_at: api_sandbox.updated_at,
-            api_config: client.api_config.clone(),
-            org_id: client.config.organization_id.clone(),
-            client: ClientRef::Borrowed {
-                toolbox_proxy_cache: client.toolbox_proxy_cache.clone(),
-                config: client.config.clone(),
-            },
+            api_config,
+            org_id,
+            client,
             toolbox_config_cache: tokio::sync::OnceCell::new(),
         }
     }
 
     /// Start the sandbox and wait for it to reach the started state.
+    ///
+    /// This is also how a paused sandbox is resumed: the endpoint starts a
+    /// stopped or archived sandbox, or resumes a paused one, depending on
+    /// the current state. Neither the Go nor TypeScript SDK has a separate
+    /// `resume` method, and no `/resume` endpoint exists.
     ///
     /// Updates the sandbox's local state from the API after the operation completes,
     /// matching Go/TypeScript SDK behavior.
@@ -234,6 +286,151 @@ impl Sandbox {
         let timeout_opt = remaining_timeout(timeout, start_time);
         self.wait_for_state_mut(SandboxState::Started, timeout_opt)
             .await
+    }
+
+    /// Pause the sandbox and wait for the pause to complete.
+    ///
+    /// Only supported on sandbox classes that support pausing; the server
+    /// rejects others. To resume, call [`Sandbox::start`].
+    ///
+    /// Uses a default timeout of 60 seconds. For a custom timeout, use
+    /// [`Sandbox::pause_with_timeout`].
+    pub async fn pause(&mut self) -> Result<(), DaytonaError> {
+        self.pause_with_timeout(Duration::from_secs(60)).await
+    }
+
+    /// Pause the sandbox with a custom timeout.
+    ///
+    /// Matching the Go/TypeScript contract, the pause completes when the
+    /// sandbox has *left* the `pausing` state (paused, stopped, archived,
+    /// ...), not only on exactly `paused` — a sandbox may transition
+    /// straight to another settled state. Pass `Duration::ZERO` for no
+    /// timeout. Updates the sandbox's local state from the API after
+    /// completion.
+    pub async fn pause_with_timeout(&mut self, timeout: Duration) -> Result<(), DaytonaError> {
+        let start_time = tokio::time::Instant::now();
+        let api_sandbox =
+            sandbox_api::pause_sandbox(&self.api_config, &self.id, self.org_id.as_deref())
+                .await
+                .map_err(convert_api_error)?;
+        self.update_from_api(api_sandbox);
+        let timeout_opt = remaining_timeout(timeout, start_time);
+        self.wait_until_left_state(SandboxState::Pausing, timeout_opt, "pause")
+            .await
+    }
+
+    /// Fork the sandbox into a new, independent sandbox and wait for the
+    /// fork to reach the started state.
+    ///
+    /// `name` names the forked sandbox; the server generates a unique name
+    /// when `None` (matching Go's `Fork(ctx, name *string)`; TypeScript
+    /// takes `{ name? }`).
+    ///
+    /// Uses a default timeout of 60 seconds. For a custom timeout, use
+    /// [`Sandbox::fork_with_timeout`].
+    pub async fn fork(&self, name: Option<&str>) -> Result<Sandbox, DaytonaError> {
+        self.fork_with_timeout(name, Duration::from_secs(60)).await
+    }
+
+    /// Fork the sandbox with a custom timeout.
+    ///
+    /// Blocks until the *child* sandbox reaches the started state, matching
+    /// Go/TypeScript behavior. Pass `Duration::ZERO` for no timeout.
+    pub async fn fork_with_timeout(
+        &self,
+        name: Option<&str>,
+        timeout: Duration,
+    ) -> Result<Sandbox, DaytonaError> {
+        let start_time = tokio::time::Instant::now();
+        let body = models::ForkSandbox {
+            name: name.map(str::to_owned),
+        };
+        let api_sandbox =
+            sandbox_api::fork_sandbox(&self.api_config, &self.id, body, self.org_id.as_deref())
+                .await
+                .map_err(convert_api_error)?;
+        let mut forked = self.sibling(api_sandbox);
+        let timeout_opt = remaining_timeout(timeout, start_time);
+        forked
+            .wait_for_state_mut(SandboxState::Started, timeout_opt)
+            .await?;
+        Ok(forked)
+    }
+
+    /// Create a snapshot of this sandbox under the given name and wait for
+    /// the snapshot to complete.
+    ///
+    /// Matching Go/TypeScript, this returns `()` rather than a snapshot
+    /// object; fetch it through the snapshot service afterwards if needed.
+    ///
+    /// Uses a default timeout of 60 seconds. For a custom timeout, use
+    /// [`Sandbox::create_snapshot_with_timeout`].
+    pub async fn create_snapshot(&mut self, name: &str) -> Result<(), DaytonaError> {
+        self.create_snapshot_with_timeout(name, Duration::from_secs(60))
+            .await
+    }
+
+    /// Create a snapshot of this sandbox with a custom timeout.
+    ///
+    /// Matching the Go/TypeScript contract, the operation completes when
+    /// the sandbox has *left* the `snapshotting` state, not on a specific
+    /// target state. Pass `Duration::ZERO` for no timeout.
+    pub async fn create_snapshot_with_timeout(
+        &mut self,
+        name: &str,
+        timeout: Duration,
+    ) -> Result<(), DaytonaError> {
+        let start_time = tokio::time::Instant::now();
+        let body = models::CreateSandboxSnapshot {
+            name: name.to_owned(),
+            // On the wire but unexposed by every reference SDK; kept
+            // unexposed here for conformance.
+            include_memory: None,
+        };
+        let api_sandbox = sandbox_api::create_sandbox_snapshot(
+            &self.api_config,
+            &self.id,
+            body,
+            self.org_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+        self.update_from_api(api_sandbox);
+        let timeout_opt = remaining_timeout(timeout, start_time);
+        self.wait_until_left_state(SandboxState::Snapshotting, timeout_opt, "snapshot")
+            .await
+    }
+
+    /// Update the sandbox's outbound network settings at runtime, without a
+    /// restart.
+    ///
+    /// At least one of `network_block_all`, `network_allow_list`
+    /// (comma-separated CIDRs), or `domain_allow_list` (comma-separated
+    /// domains) must be set — matching the TypeScript SDK's validation (Go
+    /// omits the check; TypeScript is the stricter reference). Applies the
+    /// returned sandbox state locally.
+    pub async fn update_network_settings(
+        &mut self,
+        settings: models::UpdateSandboxNetworkSettings,
+    ) -> Result<(), DaytonaError> {
+        if settings.network_block_all.is_none()
+            && settings.network_allow_list.is_none()
+            && settings.domain_allow_list.is_none()
+        {
+            return Err(DaytonaError::general(
+                "At least one of networkBlockAll, networkAllowList or domainAllowList must be set",
+            ));
+        }
+        let api_sandbox = sandbox_api::update_network_settings(
+            &self.api_config,
+            &self.id,
+            settings,
+            self.org_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+        self.update_from_api(api_sandbox);
+        Ok(())
     }
 
     /// Refresh the sandbox's last activity timestamp.
@@ -607,6 +804,62 @@ impl Sandbox {
         Ok(())
     }
 
+    /// Set the auto-pause interval in minutes.
+    ///
+    /// The sandbox will automatically pause after being idle for the
+    /// specified interval. Set to 0 to disable auto-pause. Only supported
+    /// on sandbox classes that support pausing, and at most one of
+    /// auto-stop and auto-pause may be non-zero — disable auto-stop first
+    /// with [`Sandbox::set_autostop_interval`] (0). Matches the TypeScript
+    /// SDK's `setAutoPauseInterval` (absent from Go).
+    pub async fn set_auto_pause_interval(
+        &mut self,
+        interval_minutes: i32,
+    ) -> Result<(), DaytonaError> {
+        if interval_minutes < 0 {
+            return Err(DaytonaError::general(
+                "autoPauseInterval must be a non-negative integer",
+            ));
+        }
+
+        sandbox_api::set_auto_pause_interval(
+            &self.api_config,
+            &self.id,
+            interval_minutes as f64,
+            self.org_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        self.auto_pause_interval = Some(interval_minutes as f64);
+        Ok(())
+    }
+
+    /// Set the sandbox's TTL (wall-clock lifetime) in minutes.
+    ///
+    /// The deadline re-anchors from now; set to 0 to disable (subject to
+    /// the org/region maximum lifespan). Matching the TypeScript SDK's
+    /// `setTtl`, no local field is updated — call
+    /// [`Sandbox::refresh_data`] to read the new `auto_destroy_at`.
+    pub async fn set_ttl(&self, ttl_minutes: i32) -> Result<(), DaytonaError> {
+        if ttl_minutes < 0 {
+            return Err(DaytonaError::general(
+                "ttlMinutes must be a non-negative integer",
+            ));
+        }
+
+        sandbox_api::set_ttl(
+            &self.api_config,
+            &self.id,
+            ttl_minutes as f64,
+            self.org_id.as_deref(),
+        )
+        .await
+        .map_err(convert_api_error)?;
+
+        Ok(())
+    }
+
     /// Set the auto-delete interval in minutes.
     ///
     /// The sandbox will be automatically deleted after being stopped for this
@@ -674,6 +927,7 @@ impl Sandbox {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
         Ok(ProcessService {
             config: toolbox_config.clone(),
+            websocket_headers: self.websocket_headers()?,
         })
     }
 
@@ -682,6 +936,7 @@ impl Sandbox {
         let toolbox_config = self.get_or_create_toolbox_config().await?;
         Ok(CodeInterpreterService {
             config: toolbox_config.clone(),
+            websocket_headers: self.websocket_headers()?,
         })
     }
 
@@ -796,6 +1051,54 @@ impl Sandbox {
         }
     }
 
+    /// Wait until the sandbox has left an in-progress state, updating local
+    /// fields on success.
+    ///
+    /// The "everything except the in-progress state" pattern shared by
+    /// pause (`pausing`) and sandbox snapshots (`snapshotting`) in the
+    /// Go/TypeScript SDKs: any settled state counts as completion, while
+    /// `Error`/`BuildFailed` fail immediately.
+    async fn wait_until_left_state(
+        &mut self,
+        in_progress: SandboxState,
+        timeout: Option<Duration>,
+        operation: &str,
+    ) -> Result<(), DaytonaError> {
+        let deadline = timeout.map(|t| tokio::time::Instant::now() + t);
+
+        loop {
+            if let Some(deadline) = deadline {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(DaytonaError::timeout(format!(
+                        "sandbox {} {operation} did not complete within the timeout period",
+                        self.id,
+                    )));
+                }
+            }
+
+            let api_sandbox =
+                sandbox_api::get_sandbox(&self.api_config, &self.id, self.org_id.as_deref(), None)
+                    .await
+                    .map_err(convert_api_error)?;
+
+            if let Some(state) = &api_sandbox.state {
+                if matches!(state, SandboxState::Error | SandboxState::BuildFailed) {
+                    return Err(DaytonaError::general(format!(
+                        "sandbox {} entered error state: {}",
+                        self.id,
+                        api_sandbox.error_reason.unwrap_or_default(),
+                    )));
+                }
+                if *state != in_progress {
+                    self.update_from_api(api_sandbox);
+                    return Ok(());
+                }
+            }
+
+            tokio::time::sleep(DEFAULT_POLL_INTERVAL).await;
+        }
+    }
+
     /// Wait for the sandbox to reach a target state, updating local fields on success.
     ///
     /// This is used by `start`, `stop`, and `recover` to ensure the sandbox
@@ -876,6 +1179,7 @@ impl Sandbox {
         self.labels = api_sandbox.labels;
         self.public = api_sandbox.public;
         self.state = api_sandbox.state;
+        self.sandbox_class = api_sandbox.sandbox_class;
         self.target = api_sandbox.target;
         self.cpu = api_sandbox.cpu;
         self.gpu = api_sandbox.gpu;
@@ -886,12 +1190,16 @@ impl Sandbox {
         self.backup_state = api_sandbox.backup_state;
         self.backup_created_at = api_sandbox.backup_created_at;
         self.auto_stop_interval = api_sandbox.auto_stop_interval;
+        self.auto_pause_interval = api_sandbox.auto_pause_interval;
         self.auto_archive_interval = api_sandbox.auto_archive_interval;
         self.auto_delete_interval = api_sandbox.auto_delete_interval;
+        self.auto_destroy_at = api_sandbox.auto_destroy_at;
         self.volumes = api_sandbox.volumes;
         self.build_info = api_sandbox.build_info;
         self.network_block_all = api_sandbox.network_block_all;
         self.network_allow_list = api_sandbox.network_allow_list;
+        self.domain_allow_list = api_sandbox.domain_allow_list;
+        self.outbound_proxy_url = api_sandbox.outbound_proxy_url;
         self.created_at = api_sandbox.created_at;
         self.updated_at = api_sandbox.updated_at;
     }
@@ -903,6 +1211,12 @@ impl Sandbox {
         self.toolbox_config_cache
             .get_or_try_init(|| self.create_toolbox_config())
             .await
+    }
+
+    fn websocket_headers(&self) -> Result<reqwest::header::HeaderMap, DaytonaError> {
+        match &self.client {
+            ClientRef::Borrowed { config, .. } => build_toolbox_headers(config),
+        }
     }
 
     async fn create_toolbox_config(
@@ -944,32 +1258,7 @@ impl Sandbox {
                     format!("{}/{}", base, sandbox_id)
                 };
 
-                let mut headers = reqwest::header::HeaderMap::new();
-                if let Some(token) = config.bearer_token() {
-                    headers.insert(
-                        reqwest::header::AUTHORIZATION,
-                        reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
-                            .map_err(|e| DaytonaError::general(e.to_string()))?,
-                    );
-                }
-                // Add SDK identification headers (matching Go SDK's createToolboxClient)
-                headers.insert(
-                    "X-Daytona-Source",
-                    reqwest::header::HeaderValue::from_static("rust-sdk"),
-                );
-                if let Ok(v) = reqwest::header::HeaderValue::from_str(TOOLBOX_SDK_VERSION) {
-                    headers.insert("X-Daytona-SDK-Version", v);
-                }
-                headers.insert(
-                    "X-Daytona-Split-Output",
-                    reqwest::header::HeaderValue::from_static("true"),
-                );
-                // Add organization header when using JWT (matching Go SDK)
-                if let Some(org_id) = &config.organization_id {
-                    if let Ok(v) = reqwest::header::HeaderValue::from_str(org_id) {
-                        headers.insert("X-Daytona-Organization-ID", v);
-                    }
-                }
+                let headers = build_toolbox_headers(config)?;
 
                 let client = reqwest::Client::builder()
                     .default_headers(headers)
@@ -1351,6 +1640,184 @@ mod tests {
 
         sandbox.set_auto_delete_interval(60).await.unwrap();
         assert_eq!(sandbox.auto_delete_interval, Some(60.0));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_pause_completes_when_pausing_is_left() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/pause"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "pausing")))
+            .mount(&mock_server)
+            .await;
+
+        // The sandbox settles in "stopped", not "paused": the pause
+        // contract is "left pausing", so this must still succeed.
+        Mock::given(method("GET"))
+            .and(path("/sandbox/sb-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "stopped")))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let mut sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        sandbox.pause().await.unwrap();
+        assert_eq!(sandbox.state, Some(SandboxState::Stopped));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_pause_fails_on_error_state() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/pause"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "pausing")))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/sb-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json({
+                let mut j = sandbox_json("sb-1", "error");
+                j["errorReason"] = serde_json::json!("runner lost");
+                j
+            }))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let mut sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        let err = sandbox.pause().await.unwrap_err();
+        assert!(err.message().contains("error state"));
+        assert!(err.message().contains("runner lost"));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_fork_returns_started_child() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/fork"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(sandbox_json("sb-fork", "starting")),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/sb-fork"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(sandbox_json("sb-fork", "started")),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        let forked = sandbox.fork(Some("my-fork")).await.unwrap();
+        assert_eq!(forked.id, "sb-fork");
+        assert_eq!(forked.state, Some(SandboxState::Started));
+        // The parent handle is untouched.
+        assert_eq!(sandbox.id, "sb-1");
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_create_snapshot_completes_when_snapshotting_is_left() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/snapshot"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "snapshotting")),
+            )
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sandbox/sb-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "started")))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let mut sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        sandbox.create_snapshot("nightly").await.unwrap();
+        assert_eq!(sandbox.state, Some(SandboxState::Started));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_set_auto_pause_interval() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/autopause/45"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "started")))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let mut sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        sandbox.set_auto_pause_interval(45).await.unwrap();
+        assert_eq!(sandbox.auto_pause_interval, Some(45.0));
+
+        let err = sandbox.set_auto_pause_interval(-1).await.unwrap_err();
+        assert!(err.message().contains("non-negative"));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_set_ttl() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/ttl/120"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(sandbox_json("sb-1", "started")))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+        sandbox.set_ttl(120).await.unwrap();
+
+        let err = sandbox.set_ttl(-5).await.unwrap_err();
+        assert!(err.message().contains("non-negative"));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_update_network_settings() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/sandbox/sb-1/network-settings"))
+            .respond_with(ResponseTemplate::new(200).set_body_json({
+                let mut j = sandbox_json("sb-1", "started");
+                j["networkBlockAll"] = serde_json::json!(true);
+                j
+            }))
+            .mount(&mock_server)
+            .await;
+
+        let client = test_client(&mock_server).await;
+        let mut sandbox = client
+            .sandbox_from_api(serde_json::from_value(sandbox_json("sb-1", "started")).unwrap());
+
+        let mut settings = models::UpdateSandboxNetworkSettings::new();
+        settings.network_block_all = Some(true);
+        sandbox.update_network_settings(settings).await.unwrap();
+        assert!(sandbox.network_block_all);
+
+        // At least one field must be set (TypeScript's validation).
+        let err = sandbox
+            .update_network_settings(models::UpdateSandboxNetworkSettings::new())
+            .await
+            .unwrap_err();
+        assert!(err.message().contains("At least one of"));
     }
 
     #[tokio::test]
