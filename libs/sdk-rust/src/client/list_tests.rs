@@ -226,6 +226,71 @@ async fn list_propagates_transport_errors() {
 }
 
 #[tokio::test]
+async fn list_all_follows_cursors_across_empty_pages() {
+    let server = MockServer::start().await;
+    let client = client(&server, None).await;
+    let labels = HashMap::from([("env".to_string(), "prod".to_string())]);
+    let responses = [
+        (None, page([summary("sb-1"), summary("sb-2")], Some("a"))),
+        (Some("a"), page([], Some("b"))),
+        (Some("b"), page([summary("sb-3")], None)),
+    ];
+    for (cursor, response) in responses {
+        let mock = Mock::given(path("/api/sandbox"))
+            .and(query_param("labels", r#"{"env":"prod"}"#))
+            .and(query_param("limit", "2"));
+        at_cursor(mock, cursor)
+            .respond_with(response)
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+
+    let items: Vec<_> = client
+        .list_all(Some(&labels), Some(2))
+        .try_collect()
+        .await
+        .unwrap();
+    let ids: Vec<_> = items.iter().map(|item| item.id.as_str()).collect();
+    assert_eq!(ids, ["sb-1", "sb-2", "sb-3"]);
+}
+
+#[tokio::test]
+async fn list_all_yields_items_before_reporting_a_repeated_cursor() {
+    let server = MockServer::start().await;
+    let client = client(&server, None).await;
+    for (cursor, response) in [
+        (None, page([summary("sb-1")], Some("a"))),
+        (Some("a"), page([summary("sb-2")], Some("a"))),
+    ] {
+        at_cursor(Mock::given(path("/api/sandbox")), cursor)
+            .respond_with(response)
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+
+    let mut stream = pin!(client.list_all(None, None));
+    assert_eq!(stream.try_next().await.unwrap().unwrap().id, "sb-1");
+    assert_eq!(stream.try_next().await.unwrap().unwrap().id, "sb-2");
+    let err = stream.try_next().await.unwrap_err();
+    assert_eq!(err.message(), "sandbox listing returned a repeated cursor");
+    assert!(stream.try_next().await.unwrap().is_none());
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn list_all_rejects_invalid_limits_without_sending_requests() {
+    let server = MockServer::start().await;
+    let client = client(&server, None).await;
+    let mut stream = pin!(client.list_all(None, Some(0)));
+    let err = stream.try_next().await.unwrap_err();
+    assert_eq!(err.message(), "limit must be between 1 and 200");
+    assert!(stream.try_next().await.unwrap().is_none());
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn find_one_by_id_or_name_only_fetches_details() {
     for id_or_name in ["sb-1", "test-sandbox"] {
         let server = MockServer::start().await;
@@ -264,7 +329,7 @@ async fn find_one_hydrates_first_match_after_empty_page() {
         let mock = Mock::given(method("GET"))
             .and(path("/api/sandbox"))
             .and(query_param("labels", r#"{"env":"prod"}"#))
-            .and(query_param("limit", "1"))
+            .and(query_param_is_missing("limit"))
             .and(query_param_is_missing("page"));
         at_cursor(mock, cursor)
             .respond_with(response)
@@ -299,7 +364,7 @@ async fn find_one_stops_when_no_match_remains() {
     let server = MockServer::start().await;
     let client = client(&server, None).await;
     Mock::given(path("/api/sandbox"))
-        .and(query_param("limit", "1"))
+        .and(query_param_is_missing("limit"))
         .respond_with(page([], None))
         .expect(1)
         .mount(&server)

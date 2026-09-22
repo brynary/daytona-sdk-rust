@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::pin::pin;
 use std::sync::Arc;
 
 use daytona_api_client::apis::configuration::Configuration as ApiConfiguration;
 use daytona_api_client::apis::sandbox_api;
 use daytona_api_client::models;
+use futures_util::stream::{self, Stream, TryStreamExt};
 
 use crate::config::{resolve_config, DaytonaConfig, ResolvedConfig};
 use crate::error::{error_from_response, DaytonaError};
@@ -15,6 +17,13 @@ use crate::volume::VolumeService;
 const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SDK_SOURCE: &str = "rust-sdk";
 pub(crate) const TOOLBOX_SDK_VERSION: &str = "0.0.0-dev";
+
+/// Where [`Client::list_all`] goes after the page it just yielded.
+enum ListWalk {
+    Fetch(Option<String>),
+    RepeatedCursor,
+    Done,
+}
 
 /// The main Daytona SDK client.
 pub struct Client {
@@ -148,8 +157,9 @@ impl Client {
     ///
     /// Pass `None` as the cursor for the first page, then pass the returned
     /// `next_cursor` unchanged until it is `None`, even if a page has no items.
-    /// `limit` must be in `1..=200`; `None` uses the server default of 100.
-    /// Labels are JSON encoded before being sent as a query parameter.
+    /// [`Client::list_all`] does this for you. `limit` must be in `1..=200`;
+    /// `None` uses the server default of 100. Labels are JSON encoded before
+    /// being sent as a query parameter.
     ///
     /// # Migration from offset pagination
     ///
@@ -157,23 +167,6 @@ impl Client {
     /// [`SandboxPage`] replaces `PaginatedSandboxes`: its items are
     /// [`SandboxListItem`](crate::SandboxListItem) summaries, and `next_cursor`
     /// replaces `page`, `total`, and `total_pages`.
-    ///
-    /// ```no_run
-    /// # async fn example(client: &daytona_sdk::Client) -> Result<(), daytona_sdk::DaytonaError> {
-    /// let mut cursor = None;
-    /// loop {
-    ///     let page = client.list(None, cursor.as_deref(), Some(100)).await?;
-    ///     for summary in page.items {
-    ///         println!("{}: {:?}", summary.id, summary.state);
-    ///     }
-    ///     cursor = page.next_cursor;
-    ///     if cursor.is_none() {
-    ///         break;
-    ///     }
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
     pub async fn list(
         &self,
         labels: Option<&HashMap<String, String>>,
@@ -231,6 +224,54 @@ impl Client {
         })
     }
 
+    /// Stream every sandbox summary matching `labels`, following cursors across
+    /// pages of up to `limit` items.
+    ///
+    /// Pages are fetched lazily as the stream is polled, and empty pages that
+    /// carry a cursor are skipped. The stream ends with an error, after yielding
+    /// the items it already has, if a request fails or the server repeats a
+    /// cursor. `limit` and `labels` behave as in [`Client::list`], including
+    /// eventual consistency.
+    ///
+    /// ```no_run
+    /// # async fn example(client: &daytona_sdk::Client) -> Result<(), daytona_sdk::DaytonaError> {
+    /// use futures_util::TryStreamExt;
+    ///
+    /// let summaries: Vec<_> = client.list_all(None, None).try_collect().await?;
+    /// for summary in summaries {
+    ///     println!("{}: {:?}", summary.id, summary.state);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn list_all<'a>(
+        &'a self,
+        labels: Option<&'a HashMap<String, String>>,
+        limit: Option<i32>,
+    ) -> impl Stream<Item = Result<models::SandboxListItem, DaytonaError>> + 'a {
+        let start = (ListWalk::Fetch(None), HashSet::new());
+        stream::try_unfold(start, move |(walk, mut seen_cursors)| async move {
+            let cursor = match walk {
+                ListWalk::Fetch(cursor) => cursor,
+                ListWalk::RepeatedCursor => {
+                    return Err(DaytonaError::general(
+                        "sandbox listing returned a repeated cursor",
+                    ));
+                }
+                ListWalk::Done => return Ok(None),
+            };
+            let page = self.list(labels, cursor.as_deref(), limit).await?;
+            let next = match page.next_cursor {
+                None => ListWalk::Done,
+                Some(next) if !seen_cursors.insert(next.clone()) => ListWalk::RepeatedCursor,
+                Some(next) => ListWalk::Fetch(Some(next)),
+            };
+            let items = stream::iter(page.items.into_iter().map(Ok));
+            Ok(Some((items, (next, seen_cursors))))
+        })
+        .try_flatten()
+    }
+
     /// Delete a sandbox by ID or name.
     pub async fn delete(&self, sandbox_id_or_name: &str) -> Result<(), DaytonaError> {
         sandbox_api::delete_sandbox(
@@ -248,8 +289,8 @@ impl Client {
     ///
     /// If `sandbox_id_or_name` is provided, delegates to [`Client::get`].
     /// Otherwise, searches for sandboxes matching the provided labels and returns
-    /// the first match via [`Client::get`]. Empty pages with a next cursor are
-    /// skipped. Returns a not-found error when the listing is exhausted.
+    /// the first match from [`Client::list_all`] via [`Client::get`]. Returns a
+    /// not-found error when the listing is exhausted.
     ///
     /// Label searches are eventually consistent. If the selected sandbox
     /// disappears before its details are fetched, the get's not-found error is
@@ -266,24 +307,12 @@ impl Client {
             }
         }
 
-        let mut cursor = None;
-        let mut seen_cursors = HashSet::new();
-        loop {
-            let page = self.list(labels, cursor.as_deref(), Some(1)).await?;
-            if let Some(summary) = page.items.into_iter().next() {
-                return self.get(&summary.id).await;
-            }
-            let Some(next_cursor) = page.next_cursor else {
-                return Err(DaytonaError::not_found(
-                    "no sandbox found matching criteria",
-                ));
-            };
-            if !seen_cursors.insert(next_cursor.clone()) {
-                return Err(DaytonaError::general(
-                    "sandbox listing returned a repeated cursor",
-                ));
-            }
-            cursor = Some(next_cursor);
+        let mut matches = pin!(self.list_all(labels, None));
+        match matches.try_next().await? {
+            Some(summary) => self.get(&summary.id).await,
+            None => Err(DaytonaError::not_found(
+                "no sandbox found matching criteria",
+            )),
         }
     }
 

@@ -19,6 +19,7 @@ use daytona_sdk::{
     Client, CreateParams, CreateSandboxOptions, CreateSnapshotParams, DaytonaConfig, DaytonaError,
     DockerImage, PtyCreateOptions, PtySize, Resources, SandboxClass, SandboxState, SnapshotParams,
 };
+use futures_util::TryStreamExt;
 
 fn load_env() {
     let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1408,21 +1409,14 @@ async fn test_sandbox_resources() {
 // List with label filtering
 // ---------------------------------------------------------------------------
 
-/// Follows every cursor of a label-filtered listing and returns the sandbox IDs.
+/// Lists every sandbox ID matching `labels`, across all pages.
 async fn listed_ids(client: &Client, labels: &HashMap<String, String>) -> Vec<String> {
-    let mut ids = Vec::new();
-    let mut cursor = None;
-    loop {
-        let page = client
-            .list(Some(labels), cursor.as_deref(), Some(10))
-            .await
-            .expect("list with labels");
-        ids.extend(page.items.into_iter().map(|s| s.id));
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            return ids;
-        }
-    }
+    client
+        .list_all(Some(labels), Some(10))
+        .map_ok(|summary| summary.id)
+        .try_collect()
+        .await
+        .expect("list with labels")
 }
 
 #[tokio::test]
