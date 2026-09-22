@@ -190,12 +190,10 @@ async fn test_list_sandboxes() {
     let client = create_client().await;
 
     let result = client
-        .list(None, Some(1), Some(5))
+        .list(None, None, Some(5))
         .await
         .expect("list sandboxes");
-    assert!(result.total >= 0);
-    assert!(result.page >= 1);
-    assert!(result.total_pages >= 0);
+    assert!(result.items.len() <= 5);
 }
 
 #[tokio::test]
@@ -1439,22 +1437,31 @@ async fn test_list_with_label_filter() {
         .await
         .expect("create sandbox");
 
-    // List with matching label
-    let result = client
-        .list(Some(&labels), Some(1), Some(10))
-        .await
-        .expect("list with labels");
-
-    assert!(
-        result.total >= 1,
-        "should find at least 1 sandbox with label, got total={}",
-        result.total
-    );
-
-    let found = result.items.iter().any(|s| s.id == sandbox.id);
-    assert!(found, "our sandbox should be in the filtered list");
+    // Listing is eventually consistent; follow cursors and allow the new sandbox
+    // to become visible before asserting that the label filter finds it.
+    let found = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let mut cursor = None;
+            loop {
+                let page = client
+                    .list(Some(&labels), cursor.as_deref(), Some(10))
+                    .await
+                    .expect("list with labels");
+                if page.items.iter().any(|s| s.id == sandbox.id) {
+                    return;
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    })
+    .await;
 
     sandbox.delete().await.expect("delete sandbox");
+    assert!(found.is_ok(), "our sandbox should be in the filtered list");
 }
 
 // ---------------------------------------------------------------------------
@@ -1601,8 +1608,8 @@ async fn test_client_with_explicit_config() {
         .expect("create client with config");
 
     let result = client
-        .list(None, Some(1), Some(1))
+        .list(None, None, Some(1))
         .await
         .expect("list sandboxes");
-    assert!(result.page >= 1);
+    assert!(result.items.len() <= 1);
 }

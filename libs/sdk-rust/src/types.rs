@@ -268,13 +268,15 @@ pub struct PreviewLink {
     pub token: String,
 }
 
-/// Paginated list of sandboxes.
-#[derive(Debug)]
-pub struct PaginatedSandboxes {
-    pub items: Vec<crate::sandbox::Sandbox>,
-    pub total: i64,
-    pub page: i64,
-    pub total_pages: i64,
+/// One eventually consistent page of sandbox summaries from [`crate::Client::list`].
+#[derive(Debug, Clone)]
+pub struct SandboxPage {
+    /// List summaries, without full-only data such as environment variables,
+    /// volumes, or build information. Fetch details with [`crate::Client::get`].
+    pub items: Vec<daytona_api_client::models::SandboxListItem>,
+    /// Opaque cursor for the next page, or `None` when the listing is exhausted.
+    /// An empty `items` list does not imply exhaustion if this is `Some`.
+    pub next_cursor: Option<String>,
 }
 
 /// Execution output message (from code interpreter).
