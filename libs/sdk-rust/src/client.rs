@@ -1,20 +1,29 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::pin::pin;
 use std::sync::Arc;
 
 use daytona_api_client::apis::configuration::Configuration as ApiConfiguration;
 use daytona_api_client::apis::sandbox_api;
 use daytona_api_client::models;
+use futures_util::stream::{self, Stream, TryStreamExt};
 
 use crate::config::{resolve_config, DaytonaConfig, ResolvedConfig};
 use crate::error::{error_from_response, DaytonaError};
 use crate::sandbox::Sandbox;
 use crate::snapshot::SnapshotService;
-use crate::types::{CreateParams, CreateSandboxOptions, PaginatedSandboxes};
+use crate::types::{CreateParams, CreateSandboxOptions, SandboxPage};
 use crate::volume::VolumeService;
 
 const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SDK_SOURCE: &str = "rust-sdk";
 pub(crate) const TOOLBOX_SDK_VERSION: &str = "0.0.0-dev";
+
+/// Where [`Client::list_all`] goes after the page it just yielded.
+enum ListWalk {
+    Fetch(Option<String>),
+    RepeatedCursor,
+    Done,
+}
 
 /// The main Daytona SDK client.
 pub struct Client {
@@ -140,67 +149,127 @@ impl Client {
         Ok(self.sandbox_from_api(api_sandbox))
     }
 
-    /// List sandboxes with optional label filtering and pagination.
+    /// Fetch one page of sandbox summaries, optionally filtered by labels.
     ///
-    /// Returns a paginated result matching the Go/TypeScript SDK behavior.
-    #[allow(deprecated)]
+    /// Listing is eventually consistent. Summaries omit full-only fields such as
+    /// environment variables, volumes, and build information; use [`Client::get`]
+    /// when you need a full [`Sandbox`]. This method does not fetch those details.
+    ///
+    /// Pass `None` as the cursor for the first page, then pass the returned
+    /// `next_cursor` unchanged until it is `None`, even if a page has no items.
+    /// [`Client::list_all`] does this for you. `limit` must be in `1..=200`;
+    /// `None` uses the server default of 100. Labels are JSON encoded before
+    /// being sent as a query parameter.
+    ///
+    /// # Migration from offset pagination
+    ///
+    /// The second argument is now an opaque cursor instead of a page number.
+    /// [`SandboxPage`] replaces `PaginatedSandboxes`: its items are
+    /// [`SandboxListItem`](crate::SandboxListItem) summaries, and `next_cursor`
+    /// replaces `page`, `total`, and `total_pages`.
     pub async fn list(
         &self,
         labels: Option<&HashMap<String, String>>,
-        page: Option<i32>,
+        cursor: Option<&str>,
         limit: Option<i32>,
-    ) -> Result<PaginatedSandboxes, DaytonaError> {
-        if let Some(p) = page {
-            if p < 1 {
-                return Err(DaytonaError::general("page must be a positive integer"));
-            }
-        }
+    ) -> Result<SandboxPage, DaytonaError> {
         if let Some(l) = limit {
-            if l < 1 {
-                return Err(DaytonaError::general("limit must be a positive integer"));
+            if !(1..=200).contains(&l) {
+                return Err(DaytonaError::general("limit must be between 1 and 200"));
             }
         }
 
-        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
+        let labels_json = labels
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| DaytonaError::general(e.to_string()))?;
 
-        let result = sandbox_api::list_sandboxes_paginated_deprecated(
+        let result = sandbox_api::list_sandboxes(
             &self.api_config,
             self.config.organization_id.as_deref(),
-            page.map(|p| p as f64),
-            limit.map(|l| l as f64),
+            cursor,
+            limit.map(f64::from),
             None, // id
             None, // name
             labels_json.as_deref(),
             None, // include_errored_deleted
+            None, // include_warm
             None, // states
             None, // snapshots
-            None, // regions
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None, // last_event_after, last_event_before
-            None,
-            None, // sort, order
+            None, // region_ids
+            None, // sandbox_classes
+            None, // min_cpu
+            None, // max_cpu
+            None, // min_memory_gi_b
+            None, // max_memory_gi_b
+            None, // min_disk_gi_b
+            None, // max_disk_gi_b
+            None, // is_public
+            None, // is_recoverable
+            None, // created_at_after
+            None, // created_at_before
+            None, // last_event_after
+            None, // last_event_before
+            None, // auto_destroy_at_after
+            None, // auto_destroy_at_before
+            None, // sort
+            None, // order
         )
         .await
         .map_err(convert_api_error)?;
 
-        let items = result
-            .items
-            .into_iter()
-            .map(|s| self.sandbox_from_api(s))
-            .collect();
-
-        Ok(PaginatedSandboxes {
-            items,
-            total: result.total as i64,
-            page: result.page as i64,
-            total_pages: result.total_pages as i64,
+        Ok(SandboxPage {
+            items: result.items,
+            next_cursor: result.next_cursor,
         })
+    }
+
+    /// Stream every sandbox summary matching `labels`, following cursors across
+    /// pages of up to `limit` items.
+    ///
+    /// Pages are fetched lazily as the stream is polled, and empty pages that
+    /// carry a cursor are skipped. The stream ends with an error, after yielding
+    /// the items it already has, if a request fails or the server repeats a
+    /// cursor. `limit` and `labels` behave as in [`Client::list`], including
+    /// eventual consistency.
+    ///
+    /// ```no_run
+    /// # async fn example(client: &daytona_sdk::Client) -> Result<(), daytona_sdk::DaytonaError> {
+    /// use futures_util::TryStreamExt;
+    ///
+    /// let summaries: Vec<_> = client.list_all(None, None).try_collect().await?;
+    /// for summary in summaries {
+    ///     println!("{}: {:?}", summary.id, summary.state);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn list_all<'a>(
+        &'a self,
+        labels: Option<&'a HashMap<String, String>>,
+        limit: Option<i32>,
+    ) -> impl Stream<Item = Result<models::SandboxListItem, DaytonaError>> + 'a {
+        let start = (ListWalk::Fetch(None), HashSet::new());
+        stream::try_unfold(start, move |(walk, mut seen_cursors)| async move {
+            let cursor = match walk {
+                ListWalk::Fetch(cursor) => cursor,
+                ListWalk::RepeatedCursor => {
+                    return Err(DaytonaError::general(
+                        "sandbox listing returned a repeated cursor",
+                    ));
+                }
+                ListWalk::Done => return Ok(None),
+            };
+            let page = self.list(labels, cursor.as_deref(), limit).await?;
+            let next = match page.next_cursor {
+                None => ListWalk::Done,
+                Some(next) if !seen_cursors.insert(next.clone()) => ListWalk::RepeatedCursor,
+                Some(next) => ListWalk::Fetch(Some(next)),
+            };
+            let items = stream::iter(page.items.into_iter().map(Ok));
+            Ok(Some((items, (next, seen_cursors))))
+        })
+        .try_flatten()
     }
 
     /// Delete a sandbox by ID or name.
@@ -220,8 +289,13 @@ impl Client {
     ///
     /// If `sandbox_id_or_name` is provided, delegates to [`Client::get`].
     /// Otherwise, searches for sandboxes matching the provided labels and returns
-    /// the first match. Returns a not-found error if no matching sandbox is found.
-    #[allow(deprecated)]
+    /// the first match from [`Client::list_all`] via [`Client::get`]. Returns a
+    /// not-found error when the listing is exhausted.
+    ///
+    /// Label searches are eventually consistent. If the selected sandbox
+    /// disappears before its details are fetched, the get's not-found error is
+    /// returned. Other listing or get errors are also propagated without retrying
+    /// or selecting a different match. Repeated cursors return an error.
     pub async fn find_one(
         &self,
         sandbox_id_or_name: Option<&str>,
@@ -233,42 +307,13 @@ impl Client {
             }
         }
 
-        let labels_json = labels.map(|l| serde_json::to_string(l).unwrap_or_default());
-
-        let api_sandboxes = sandbox_api::list_sandboxes_paginated_deprecated(
-            &self.api_config,
-            self.config.organization_id.as_deref(),
-            Some(1.0), // page
-            Some(1.0), // limit
-            None,      // id
-            None,      // name
-            labels_json.as_deref(),
-            None, // include_errored_deleted
-            None, // states
-            None, // snapshots
-            None, // regions
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None, // last_event_after, last_event_before
-            None,
-            None, // sort, order
-        )
-        .await
-        .map_err(convert_api_error)?;
-
-        let items = api_sandboxes.items;
-        if items.is_empty() {
-            return Err(DaytonaError::not_found(
+        let mut matches = pin!(self.list_all(labels, None));
+        match matches.try_next().await? {
+            Some(summary) => self.get(&summary.id).await,
+            None => Err(DaytonaError::not_found(
                 "no sandbox found matching criteria",
-            ));
+            )),
         }
-
-        Ok(self.sandbox_from_api(items.into_iter().next().unwrap()))
     }
 
     /// Start a stopped sandbox and wait for it to reach the started state.
@@ -903,70 +948,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_client_list_sandboxes() {
-        let mock_server = MockServer::start().await;
-
-        let paginated_json = serde_json::json!({
-            "items": [
-                {
-                    "id": "sb-1",
-                    "organizationId": "org-1",
-                    "name": "sandbox-1",
-                    "user": "daytona",
-                    "env": {},
-                    "labels": {},
-                    "public": false,
-                    "networkBlockAll": false,
-                    "target": "us",
-                    "toolboxProxyUrl": "https://proxy.example.com/toolbox",
-                    "cpu": 2.0,
-                    "gpu": 0.0,
-                    "memory": 4.0,
-                    "disk": 20.0
-                },
-                {
-                    "id": "sb-2",
-                    "organizationId": "org-1",
-                    "name": "sandbox-2",
-                    "user": "daytona",
-                    "env": {},
-                    "labels": {},
-                    "public": false,
-                    "networkBlockAll": false,
-                    "target": "us",
-                    "toolboxProxyUrl": "https://proxy.example.com/toolbox",
-                    "cpu": 2.0,
-                    "gpu": 0.0,
-                    "memory": 4.0,
-                    "disk": 20.0
-                }
-            ],
-            "total": 2.0,
-            "page": 1.0,
-            "totalPages": 1.0
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
-            .mount(&mock_server)
-            .await;
-
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let result = client.list(None, None, None).await.unwrap();
-        assert_eq!(result.items.len(), 2);
-        assert_eq!(result.items[0].id, "sb-1");
-        assert_eq!(result.items[1].id, "sb-2");
-        assert_eq!(result.total, 2);
-        assert_eq!(result.page, 1);
-    }
-
-    #[tokio::test]
     async fn test_client_delete_sandbox() {
         let mock_server = MockServer::start().await;
 
@@ -1161,116 +1142,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_client_find_one_by_id() {
-        let mock_server = MockServer::start().await;
-
-        let sandbox_json = serde_json::json!({
-            "id": "sandbox-123",
-            "organizationId": "org-1",
-            "name": "test-sandbox",
-            "user": "daytona",
-            "env": {},
-            "labels": {},
-            "public": false,
-            "networkBlockAll": false,
-            "target": "us",
-            "toolboxProxyUrl": "https://proxy.example.com/toolbox",
-            "cpu": 2.0,
-            "gpu": 0.0,
-            "memory": 4.0,
-            "disk": 20.0,
-            "state": "started"
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/sandbox/sandbox-123"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&sandbox_json))
-            .mount(&mock_server)
-            .await;
-
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let sandbox = client.find_one(Some("sandbox-123"), None).await.unwrap();
-        assert_eq!(sandbox.id, "sandbox-123");
-    }
-
-    #[tokio::test]
-    async fn test_client_find_one_by_labels() {
-        let mock_server = MockServer::start().await;
-
-        let paginated_json = serde_json::json!({
-            "items": [{
-                "id": "sb-match",
-                "organizationId": "org-1",
-                "name": "matched-sandbox",
-                "user": "daytona",
-                "env": {},
-                "labels": {"env": "prod"},
-                "public": false,
-                "networkBlockAll": false,
-                "target": "us",
-                "toolboxProxyUrl": "https://proxy.example.com/toolbox",
-                "cpu": 2.0,
-                "gpu": 0.0,
-                "memory": 4.0,
-                "disk": 20.0,
-                "state": "started"
-            }],
-            "total": 1.0,
-            "page": 1.0,
-            "totalPages": 1.0
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
-            .mount(&mock_server)
-            .await;
-
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let mut labels = HashMap::new();
-        labels.insert("env".to_string(), "prod".to_string());
-        let sandbox = client.find_one(None, Some(&labels)).await.unwrap();
-        assert_eq!(sandbox.id, "sb-match");
-    }
-
-    #[tokio::test]
-    async fn test_client_find_one_not_found() {
-        let mock_server = MockServer::start().await;
-
-        let paginated_json = serde_json::json!({
-            "items": [],
-            "total": 0.0,
-            "page": 1.0,
-            "totalPages": 0.0
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/sandbox/paginated"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&paginated_json))
-            .mount(&mock_server)
-            .await;
-
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let err = client.find_one(None, None).await.unwrap_err();
-        assert!(matches!(err, DaytonaError::NotFound { .. }));
-    }
-
-    #[tokio::test]
     async fn test_client_get_empty_id() {
         let mock_server = MockServer::start().await;
         let config = DaytonaConfig {
@@ -1281,35 +1152,6 @@ mod tests {
         let client = Client::new_with_config(config).await.unwrap();
         let err = client.get("").await.unwrap_err();
         assert!(err.message().contains("sandbox ID or name is required"));
-    }
-
-    #[tokio::test]
-    async fn test_client_list_invalid_page() {
-        let mock_server = MockServer::start().await;
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let err = client.list(None, Some(0), None).await.unwrap_err();
-        assert!(err.message().contains("page must be a positive integer"));
-
-        let err = client.list(None, Some(-1), None).await.unwrap_err();
-        assert!(err.message().contains("page must be a positive integer"));
-    }
-
-    #[tokio::test]
-    async fn test_client_list_invalid_limit() {
-        let mock_server = MockServer::start().await;
-        let config = DaytonaConfig {
-            api_key: Some("test-key".to_string()),
-            api_url: Some(mock_server.uri()),
-            ..Default::default()
-        };
-        let client = Client::new_with_config(config).await.unwrap();
-        let err = client.list(None, None, Some(0)).await.unwrap_err();
-        assert!(err.message().contains("limit must be a positive integer"));
     }
 
     #[test]
@@ -1384,3 +1226,6 @@ mod tests {
         assert_eq!(cs.target.as_deref(), Some("eu"));
     }
 }
+
+#[cfg(test)]
+mod list_tests;

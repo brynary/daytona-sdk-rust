@@ -23,6 +23,9 @@ pub use sandbox::Sandbox;
 // Re-export SandboxState from generated client (matches Go/TS enum usage)
 pub use daytona_api_client::models::{SandboxClass, SandboxState};
 
+/// Sandbox list summary, without the full details returned by [`Client::get`].
+pub use daytona_api_client::models::SandboxListItem;
+
 // Re-export sandbox-related enums exposed on the Sandbox struct
 pub use daytona_api_client::models::sandbox::BackupState;
 
@@ -30,8 +33,8 @@ pub use daytona_api_client::models::sandbox::BackupState;
 pub use types::{
     CodeLanguage, CreateParams, CreateSandboxOptions, CreateSnapshotParams, ExecuteCommandOptions,
     ExecuteResponse, GitCloneOptions, GitCommitOptions, GitDeleteBranchOptions, GitPullOptions,
-    GitPushOptions, ImageParams, ImageSource, PaginatedSandboxes, PreviewLink, PtyCreateOptions,
-    PtyResult, PtySessionOptions, PtySize, Resources, RunCodeOptions, SandboxBaseParams,
+    GitPushOptions, ImageParams, ImageSource, PreviewLink, PtyCreateOptions, PtyResult,
+    PtySessionOptions, PtySize, Resources, RunCodeOptions, SandboxBaseParams, SandboxPage,
     ScreenshotOptions, ScreenshotRegion, SetFilePermissionsOptions, SnapshotParams, VolumeMount,
 };
 

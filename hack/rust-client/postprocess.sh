@@ -31,6 +31,25 @@ for response_model in api_key_list api_key_response organization_role; do
   fi
 done
 
+# The spec inlines the sandbox class enum in some models, so the generator emits
+# duplicate SandboxClass types. Alias each copy to the shared models::SandboxClass
+# so one type flows through the API, and stop if a copy's variants ever diverge.
+enum_body='print $1 if /pub enum SandboxClass \{(.*?)\n\}/s'
+if [ -f src/models/sandbox_class.rs ]; then
+  shared_variants=$(perl -0ne "$enum_body" src/models/sandbox_class.rs)
+  for model in sandbox snapshot_dto; do
+    model_file="src/models/${model}.rs"
+    [ -f "$model_file" ] || continue
+    inline_variants=$(perl -0ne "$enum_body" "$model_file")
+    [ -n "$inline_variants" ] || continue
+    if [ "$inline_variants" != "$shared_variants" ]; then
+      echo "error: $model_file declares SandboxClass variants that differ from models::SandboxClass" >&2
+      exit 1
+    fi
+    perl -0pi -e 's{(?:///[^\n]*\n)*#\[derive\([^\n]*\)\]\npub enum SandboxClass \{.*?\n\}\n\nimpl Default for SandboxClass \{.*?\n\}\n}{pub use crate::models::SandboxClass;\n}s' "$model_file"
+  done
+fi
+
 # Add module-level clippy allows to lib.rs if not already present
 if ! grep -q "clippy::all" src/lib.rs; then
   HEADER='#![allow(clippy::all)]

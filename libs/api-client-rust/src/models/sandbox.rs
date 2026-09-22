@@ -236,23 +236,4 @@ impl Default for BackupState {
         Self::None
     }
 }
-/// The class of the sandbox
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum SandboxClass {
-    #[serde(rename = "linux-vm")]
-    LINUX_VM,
-    #[serde(rename = "container")]
-    CONTAINER,
-    #[serde(rename = "android")]
-    ANDROID,
-    #[serde(rename = "windows")]
-    WINDOWS,
-    #[serde(rename = "unknown_default_open_api")]
-    UnknownDefaultOpenApi,
-}
-
-impl Default for SandboxClass {
-    fn default() -> SandboxClass {
-        Self::LINUX_VM
-    }
-}
+pub use crate::models::SandboxClass;
