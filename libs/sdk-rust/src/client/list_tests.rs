@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::{json, Value};
 use wiremock::matchers::{header, method, path, query_param, query_param_is_missing};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockBuilder, MockServer, ResponseTemplate};
 
 async fn client(server: &MockServer, user_agent: Option<&str>) -> Client {
     Client::new_with_config(DaytonaConfig {
@@ -42,6 +42,20 @@ fn full_sandbox(id: &str) -> Value {
     sandbox
 }
 
+fn page(items: impl Into<Vec<Value>>, next_cursor: Option<&str>) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "items": items.into(),
+        "nextCursor": next_cursor
+    }))
+}
+
+fn at_cursor(mock: MockBuilder, cursor: Option<&str>) -> MockBuilder {
+    match cursor {
+        None => mock.and(query_param_is_missing("cursor")),
+        Some(cursor) => mock.and(query_param("cursor", cursor)),
+    }
+}
+
 #[tokio::test]
 async fn list_uses_supported_path_and_preserves_headers_and_defaults() {
     for user_agent in [None, Some("embedding-app/9.9")] {
@@ -59,20 +73,20 @@ async fn list_uses_supported_path_and_preserves_headers_and_defaults() {
             .and(query_param_is_missing("cursor"))
             .and(query_param_is_missing("labels"))
             .and(query_param_is_missing("limit"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "items": [summary("sb-1"), summary("sb-2")],
-                "nextCursor": null
-            })))
+            .respond_with(page([summary("sb-1"), summary("sb-2")], None))
             .expect(1)
             .mount(&server)
             .await;
 
-        let page: crate::SandboxPage = client.list(None, None, None).await.unwrap();
-        let item: &crate::SandboxListItem = &page.items[0];
-        assert_eq!(item.id, "sb-1");
-        assert_eq!(page.items[1].id, "sb-2");
-        assert_eq!(page.items.len(), 2);
-        assert!(page.next_cursor.is_none());
+        // Annotated to check both types are re-exported at the crate root.
+        let listed: crate::SandboxPage = client.list(None, None, None).await.unwrap();
+        let ids: Vec<&str> = listed
+            .items
+            .iter()
+            .map(|item: &crate::SandboxListItem| item.id.as_str())
+            .collect();
+        assert_eq!(ids, ["sb-1", "sb-2"]);
+        assert!(listed.next_cursor.is_none());
         // No legacy request or eager hydration of inventory entries.
         assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
@@ -88,22 +102,18 @@ async fn list_round_trips_labels_and_opaque_cursors_including_empty_pages() {
     ]);
     let cursors = [" +/=?&%#雪 ", "", "eyJpZCI6InNiLTIifQ=="];
     let responses = [
-        json!({"items": [summary("sb-1")], "nextCursor": cursors[0]}),
-        json!({"items": [], "nextCursor": cursors[1]}),
-        json!({"items": [summary("sb-2")], "nextCursor": cursors[2]}),
-        json!({"items": [], "nextCursor": null}),
+        (None, page([summary("sb-1")], Some(cursors[0]))),
+        (Some(cursors[0]), page([], Some(cursors[1]))),
+        (Some(cursors[1]), page([summary("sb-2")], Some(cursors[2]))),
+        (Some(cursors[2]), page([], None)),
     ];
-    for (index, response) in responses.into_iter().enumerate() {
+    for (cursor, response) in responses {
         let mock = Mock::given(method("GET"))
             .and(path("/api/sandbox"))
             .and(query_param("limit", "2"))
             .and(query_param_is_missing("page"));
-        let mock = if index == 0 {
-            mock.and(query_param_is_missing("cursor"))
-        } else {
-            mock.and(query_param("cursor", cursors[index - 1]))
-        };
-        mock.respond_with(ResponseTemplate::new(200).set_body_json(response))
+        at_cursor(mock, cursor)
+            .respond_with(response)
             .expect(1)
             .mount(&server)
             .await;
@@ -112,13 +122,13 @@ async fn list_round_trips_labels_and_opaque_cursors_including_empty_pages() {
     let mut cursor = None;
     let mut ids = Vec::new();
     for expected_cursor in cursors.into_iter().map(Some).chain([None]) {
-        let page = client
+        let listed = client
             .list(Some(&labels), cursor.as_deref(), Some(2))
             .await
             .unwrap();
-        assert_eq!(page.next_cursor.as_deref(), expected_cursor);
-        ids.extend(page.items.into_iter().map(|item| item.id));
-        cursor = page.next_cursor;
+        assert_eq!(listed.next_cursor.as_deref(), expected_cursor);
+        ids.extend(listed.items.into_iter().map(|item| item.id));
+        cursor = listed.next_cursor;
     }
     assert_eq!(ids, ["sb-1", "sb-2"]);
     let requests = server.received_requests().await.unwrap();
@@ -127,10 +137,10 @@ async fn list_round_trips_labels_and_opaque_cursors_including_empty_pages() {
         let query: HashMap<_, _> = request.url.query_pairs().into_owned().collect();
         let decoded: HashMap<String, String> = serde_json::from_str(&query["labels"]).unwrap();
         assert_eq!(decoded, labels);
-        assert_eq!(
-            query.len(),
-            if query.contains_key("cursor") { 3 } else { 2 }
-        );
+        let mut keys: Vec<_> = query.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        keys.retain(|key| *key != "cursor");
+        assert_eq!(keys, ["labels", "limit"]);
     }
 }
 
@@ -141,9 +151,7 @@ async fn list_accepts_limit_boundaries() {
     for limit in [1, 100, 200] {
         Mock::given(path("/api/sandbox"))
             .and(query_param("limit", limit.to_string()))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "items": [], "nextCursor": null
-            })))
+            .respond_with(page([], None))
             .expect(1)
             .mount(&server)
             .await;
@@ -245,27 +253,21 @@ async fn find_one_hydrates_first_match_after_empty_page() {
     let server = MockServer::start().await;
     let client = client(&server, Some("embedding-app/9.9")).await;
     let labels = HashMap::from([("env".to_string(), "prod".to_string())]);
-    for cursor in [None, Some("next+/=&")] {
+    let responses = [
+        (None, page([], Some("next+/=&"))),
+        (
+            Some("next+/=&"),
+            page([summary("sb-match")], Some("do-not-fetch")),
+        ),
+    ];
+    for (cursor, response) in responses {
         let mock = Mock::given(method("GET"))
             .and(path("/api/sandbox"))
             .and(query_param("labels", r#"{"env":"prod"}"#))
             .and(query_param("limit", "1"))
             .and(query_param_is_missing("page"));
-        let (mock, response) = match cursor {
-            None => (
-                mock.and(query_param_is_missing("cursor")),
-                json!({
-                    "items": [], "nextCursor": "next+/=&"
-                }),
-            ),
-            Some(cursor) => (
-                mock.and(query_param("cursor", cursor)),
-                json!({
-                    "items": [summary("sb-match")], "nextCursor": "do-not-fetch"
-                }),
-            ),
-        };
-        mock.respond_with(ResponseTemplate::new(200).set_body_json(response))
+        at_cursor(mock, cursor)
+            .respond_with(response)
             .expect(1)
             .mount(&server)
             .await;
@@ -298,9 +300,7 @@ async fn find_one_stops_when_no_match_remains() {
     let client = client(&server, None).await;
     Mock::given(path("/api/sandbox"))
         .and(query_param("limit", "1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "items": [], "nextCursor": null
-        })))
+        .respond_with(page([], None))
         .expect(1)
         .mount(&server)
         .await;
@@ -316,9 +316,7 @@ async fn find_one_propagates_hydration_errors_without_trying_another_match() {
         let server = MockServer::start().await;
         let client = client(&server, None).await;
         Mock::given(path("/api/sandbox"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "items": [summary("sb-gone")], "nextCursor": "do-not-fetch"
-            })))
+            .respond_with(page([summary("sb-gone")], Some("do-not-fetch")))
             .expect(1)
             .mount(&server)
             .await;
@@ -342,9 +340,7 @@ async fn find_one_propagates_failure_after_an_empty_page() {
     let client = client(&server, None).await;
     Mock::given(path("/api/sandbox"))
         .and(query_param_is_missing("cursor"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "items": [], "nextCursor": "next"
-        })))
+        .respond_with(page([], Some("next")))
         .expect(1)
         .mount(&server)
         .await;
@@ -367,17 +363,11 @@ async fn find_one_rejects_cursor_cycles() {
     let server = MockServer::start().await;
     let client = client(&server, None).await;
     for (cursor, next_cursor) in [(None, "a"), (Some("a"), "b"), (Some("b"), "a")] {
-        let mock = Mock::given(path("/api/sandbox"));
-        let mock = match cursor {
-            None => mock.and(query_param_is_missing("cursor")),
-            Some(cursor) => mock.and(query_param("cursor", cursor)),
-        };
-        mock.respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "items": [], "nextCursor": next_cursor
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
+        at_cursor(Mock::given(path("/api/sandbox")), cursor)
+            .respond_with(page([], Some(next_cursor)))
+            .expect(1)
+            .mount(&server)
+            .await;
     }
     let err = client.find_one(None, None).await.unwrap_err();
     assert_eq!(err.message(), "sandbox listing returned a repeated cursor");

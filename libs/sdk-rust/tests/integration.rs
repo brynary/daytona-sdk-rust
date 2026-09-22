@@ -1408,6 +1408,23 @@ async fn test_sandbox_resources() {
 // List with label filtering
 // ---------------------------------------------------------------------------
 
+/// Follows every cursor of a label-filtered listing and returns the sandbox IDs.
+async fn listed_ids(client: &Client, labels: &HashMap<String, String>) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = client
+            .list(Some(labels), cursor.as_deref(), Some(10))
+            .await
+            .expect("list with labels");
+        ids.extend(page.items.into_iter().map(|s| s.id));
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return ids;
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_list_with_label_filter() {
     let client = create_client().await;
@@ -1439,29 +1456,16 @@ async fn test_list_with_label_filter() {
 
     // Listing is eventually consistent; follow cursors and allow the new sandbox
     // to become visible before asserting that the label filter finds it.
-    let found = tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            let mut cursor = None;
-            loop {
-                let page = client
-                    .list(Some(&labels), cursor.as_deref(), Some(10))
-                    .await
-                    .expect("list with labels");
-                if page.items.iter().any(|s| s.id == sandbox.id) {
-                    return;
-                }
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    break;
-                }
-            }
+    let visible = tokio::time::timeout(Duration::from_secs(30), async {
+        while !listed_ids(&client, &labels).await.contains(&sandbox.id) {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     })
-    .await;
+    .await
+    .is_ok();
 
     sandbox.delete().await.expect("delete sandbox");
-    assert!(found.is_ok(), "our sandbox should be in the filtered list");
+    assert!(visible, "our sandbox should be in the filtered list");
 }
 
 // ---------------------------------------------------------------------------
