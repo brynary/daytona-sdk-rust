@@ -551,14 +551,11 @@ impl StdDemux {
         let mut chunks = Vec::new();
 
         loop {
-            let safe_len = safe_demux_len(&self.buffer);
-            if safe_len == 0 {
-                break;
-            }
-
-            let safe_region = &self.buffer[..safe_len];
-            let stdout_idx = find_subslice(safe_region, STDOUT_PREFIX_BYTES);
-            let stderr_idx = find_subslice(safe_region, STDERR_PREFIX_BYTES);
+            // A complete marker anywhere in the buffer, including at its
+            // very end, switches streams. Only bytes after the last complete
+            // marker can be the start of one that is still arriving.
+            let stdout_idx = find_subslice(&self.buffer, STDOUT_PREFIX_BYTES);
+            let stderr_idx = find_subslice(&self.buffer, STDERR_PREFIX_BYTES);
             let next = match (stdout_idx, stderr_idx) {
                 (Some(out), Some(err)) if out <= err => {
                     Some((out, StreamKind::Stdout, STDOUT_PREFIX_BYTES.len()))
@@ -578,6 +575,7 @@ impl StdDemux {
                     self.saw_marker = true;
                 }
                 None => {
+                    let safe_len = safe_demux_len(&self.buffer);
                     emit_demux_chunk(self.current_kind, &self.buffer[..safe_len], &mut chunks);
                     self.buffer.drain(..safe_len);
                     break;
@@ -1021,6 +1019,62 @@ mod tests {
         assert_eq!(logs.stdout, "stdout line 1\nstdout line 2\n");
         assert_eq!(logs.stderr, "stderr line 1\n");
         assert!(logs.streams_separated);
+    }
+
+    /// Feeds `stream` to a demuxer in pieces cut at `cuts`, as WebSocket
+    /// messages arrive, and returns what each stream received.
+    fn demux_in_pieces(stream: &[u8], cuts: &[usize]) -> (String, String) {
+        let mut demux = StdDemux::default();
+        let mut chunks = Vec::new();
+        let mut start = 0;
+        for &cut in cuts.iter().chain([stream.len()].iter()) {
+            chunks.extend(demux.push(&stream[start..cut]));
+            start = cut;
+        }
+        chunks.extend(demux.finish());
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        for chunk in chunks {
+            match chunk.stream {
+                StreamKind::Stdout => stdout.push_str(&chunk.text),
+                StreamKind::Stderr => stderr.push_str(&chunk.text),
+            }
+        }
+        (stdout, stderr)
+    }
+
+    #[test]
+    fn test_demux_is_exact_wherever_a_message_boundary_falls() {
+        let stream = [
+            STDOUT_PREFIX_BYTES,
+            b"out one\n",
+            STDERR_PREFIX_BYTES,
+            b"err one\n",
+            STDOUT_PREFIX_BYTES,
+            b"out two\n",
+            STDOUT_PREFIX_BYTES,
+            STDERR_PREFIX_BYTES,
+            b"err two\n",
+        ]
+        .concat();
+        let expected = (
+            "out one\nout two\n".to_owned(),
+            "err one\nerr two\n".to_owned(),
+        );
+        for first in 1..stream.len() {
+            assert_eq!(
+                demux_in_pieces(&stream, &[first]),
+                expected,
+                "cut at {first}"
+            );
+            for second in first + 1..stream.len() {
+                assert_eq!(
+                    demux_in_pieces(&stream, &[first, second]),
+                    expected,
+                    "cuts at {first} and {second}"
+                );
+            }
+        }
     }
 
     #[test]
