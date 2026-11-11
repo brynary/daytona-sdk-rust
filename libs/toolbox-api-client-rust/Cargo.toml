@@ -3,7 +3,7 @@ name = "daytona-toolbox-client"
 version = "0.1.0"
 authors = ["OpenAPI Generator team and contributors"]
 description = "Daytona Toolbox API. The base URL comes from the sandbox's `toolboxProxyUrl` field (returned in sandbox DTO by the main Daytona API) plus the sandbox ID: `{toolboxProxyUrl}/{sandboxId}/{endpoint}`. Default for Daytona Cloud: `https://proxy.app.daytona.io/toolbox/{sandboxId}`."
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]

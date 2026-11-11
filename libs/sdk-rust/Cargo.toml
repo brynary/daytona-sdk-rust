@@ -3,7 +3,7 @@ name = "daytona-sdk"
 version = "0.1.0"
 edition = "2021"
 description = "Daytona SDK for Rust"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 daytona-api-client = { path = "../api-client-rust" }
